@@ -228,26 +228,7 @@ class StrategyService:
                 df = await self.data_service.get_historical_data(stock_code, start_date, end_date)
                 return df
             else:
-                # 模拟数据
-                dates = pd.date_range(end=datetime.now(), periods=days, freq='D')
-                data = []
-                base_price = 10.0
-                
-                for date in dates:
-                    if date.weekday() < 5:  # 工作日
-                        change = (np.random.random() - 0.5) * 0.1
-                        base_price *= (1 + change)
-                        
-                        data.append({
-                            "trade_date": date,
-                            "open_price": base_price * (1 + (np.random.random() - 0.5) * 0.02),
-                            "high_price": base_price * (1 + np.random.random() * 0.03),
-                            "low_price": base_price * (1 - np.random.random() * 0.03),
-                            "close_price": base_price,
-                            "volume": int(np.random.random() * 1000000)
-                        })
-                
-                return pd.DataFrame(data)
+                raise Exception("数据服务未初始化，无法获取股票数据")
                 
         except Exception as e:
             logger.error(f"获取{stock_code}数据失败: {e}")

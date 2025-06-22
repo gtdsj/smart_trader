@@ -12,16 +12,11 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, update, and_, desc
 
-try:
-    import xtdata
-except ImportError:
-    logger.warning("xtdata模块未安装，数据获取功能将受限")
-    xtdata = None
-
 from config import get_settings
-from core.database import get_db, StockData
+from core.database import get_db
 from core.redis_client import get_redis
 from services.notification_service import NotificationService
+from services.xtquant_service import XtQuantService
 
 
 class DataService:
@@ -31,6 +26,7 @@ class DataService:
         self.settings = get_settings()
         self.redis_client = get_redis()
         self.notification_service = NotificationService()
+        self.xtquant_service = XtQuantService()
         self.is_running = False
         self.data_update_task = None
         
@@ -47,32 +43,46 @@ class DataService:
     
     async def start(self):
         """启动数据服务"""
-        if self.is_running:
-            return
-        
-        self.is_running = True
-        logger.info("数据服务启动中...")
-        
-        # 启动数据更新任务
-        self.data_update_task = asyncio.create_task(self._data_update_loop())
-        
-        logger.info("数据服务启动完成")
+        try:
+            logger.info("启动数据服务...")
+            
+            # 启动XtQuant数据服务
+            await self.xtquant_service.start()
+            
+            # 启动数据更新循环
+            self.data_update_task = asyncio.create_task(self._data_update_loop())
+            
+            logger.info("数据服务启动成功")
+            
+        except Exception as e:
+            logger.error(f"启动数据服务失败: {e}")
+            await self.notification_service.send_system_error_notification(
+                error_type="数据服务启动失败",
+                error_message=str(e),
+                module="DataService"
+            )
+            raise
     
     async def stop(self):
         """停止数据服务"""
-        if not self.is_running:
-            return
-        
-        self.is_running = False
-        
-        if self.data_update_task:
-            self.data_update_task.cancel()
-            try:
-                await self.data_update_task
-            except asyncio.CancelledError:
-                pass
-        
-        logger.info("数据服务已停止")
+        try:
+            logger.info("停止数据服务...")
+            
+            # 停止数据更新任务
+            if self.data_update_task:
+                self.data_update_task.cancel()
+                try:
+                    await self.data_update_task
+                except asyncio.CancelledError:
+                    pass
+            
+            # 停止XtQuant数据服务
+            await self.xtquant_service.stop()
+            
+            logger.info("数据服务已停止")
+            
+        except Exception as e:
+            logger.error(f"停止数据服务失败: {e}")
     
     async def _data_update_loop(self):
         """数据更新循环"""
@@ -125,29 +135,17 @@ class DataService:
             return cached_data
         
         try:
-            if xtdata is None:
-                # 模拟数据
-                stock_list = [
-                    {"stock_code": "000001.SZ", "stock_name": "平安银行", "market": "SZ"},
-                    {"stock_code": "000002.SZ", "stock_name": "万科A", "market": "SZ"},
-                    {"stock_code": "600000.SH", "stock_name": "浦发银行", "market": "SH"},
-                    {"stock_code": "600036.SH", "stock_name": "招商银行", "market": "SH"},
-                ]
+            # 使用XtQuantService获取股票列表
+            stock_list_result = await self.xtquant_service.get_stock_list(market)
+            
+            if stock_list_result["success"]:
+                stock_list = stock_list_result["data"]
+                # 缓存数据
+                await self.redis_client.set(cache_key, stock_list, expire=3600)  # 1小时缓存
+                return stock_list
             else:
-                # 使用xtdata获取股票列表
-                if market == "SH":
-                    stock_list = xtdata.get_stock_list_in_sector("沪市A股")
-                elif market == "SZ":
-                    stock_list = xtdata.get_stock_list_in_sector("深市A股")
-                else:
-                    sh_stocks = xtdata.get_stock_list_in_sector("沪市A股")
-                    sz_stocks = xtdata.get_stock_list_in_sector("深市A股")
-                    stock_list = sh_stocks + sz_stocks
-            
-            # 缓存数据
-            await self.redis_client.set(cache_key, stock_list, expire=3600)  # 1小时缓存
-            
-            return stock_list
+                logger.error(f"获取股票列表失败: {stock_list_result.get('error', '未知错误')}")
+                return []
             
         except Exception as e:
             logger.error(f"获取股票列表失败: {e}")
@@ -155,60 +153,27 @@ class DataService:
     
     async def get_realtime_data(self, stock_codes: List[str]) -> Dict[str, Dict[str, Any]]:
         """获取实时行情数据"""
-        result = {}
-        
-        for stock_code in stock_codes:
-            cache_key = f"realtime:{stock_code}"
+        try:
+            # 使用XtQuantService获取实时数据
+            realtime_result = await self.xtquant_service.get_real_time_data(stock_codes)
             
-            # 尝试从缓存获取
-            cached_data = await self.redis_client.get(cache_key)
-            if cached_data:
-                result[stock_code] = cached_data
-                continue
-            
-            try:
-                if xtdata is None:
-                    # 模拟数据
-                    data = {
-                        "stock_code": stock_code,
-                        "current_price": 10.50 + np.random.random() * 2,
-                        "open_price": 10.30,
-                        "high_price": 10.80,
-                        "low_price": 10.20,
-                        "volume": int(np.random.random() * 1000000),
-                        "amount": np.random.random() * 10000000,
-                        "change_ratio": (np.random.random() - 0.5) * 0.1,
-                        "timestamp": datetime.now().isoformat()
-                    }
-                else:
-                    # 使用xtdata获取实时数据
-                    tick_data = xtdata.get_full_tick([stock_code])
-                    if tick_data and stock_code in tick_data:
-                        tick = tick_data[stock_code]
-                        data = {
-                            "stock_code": stock_code,
-                            "current_price": tick.get("lastPrice", 0),
-                            "open_price": tick.get("open", 0),
-                            "high_price": tick.get("high", 0),
-                            "low_price": tick.get("low", 0),
-                            "volume": tick.get("volume", 0),
-                            "amount": tick.get("amount", 0),
-                            "change_ratio": tick.get("pctChg", 0) / 100,
-                            "timestamp": datetime.now().isoformat()
-                        }
-                    else:
-                        continue
-                
-                result[stock_code] = data
+            if realtime_result["success"]:
+                result = realtime_result["data"]
                 
                 # 缓存数据
-                await self.redis_client.set(cache_key, data, expire=10)  # 10秒缓存
+                for stock_code, data in result.items():
+                    cache_key = f"realtime:{stock_code}"
+                    await self.redis_client.set(cache_key, data, expire=30)  # 30秒缓存
                 
-            except Exception as e:
-                logger.error(f"获取{stock_code}实时数据失败: {e}")
-                continue
-        
-        return result
+                return result
+            else:
+                logger.error(f"获取实时数据失败: {realtime_result.get('error', '未知错误')}")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"获取实时数据失败: {e}")
+            return {}
+
     
     async def get_historical_data(self, stock_code: str, start_date: str, 
                                 end_date: str, period: str = "1d") -> pd.DataFrame:
@@ -221,47 +186,25 @@ class DataService:
             return pd.DataFrame(cached_data)
         
         try:
-            if xtdata is None:
-                # 模拟数据
-                date_range = pd.date_range(start=start_date, end=end_date, freq='D')
-                data = []
-                base_price = 10.0
-                
-                for date in date_range:
-                    if date.weekday() < 5:  # 工作日
-                        change = (np.random.random() - 0.5) * 0.1
-                        base_price *= (1 + change)
-                        
-                        data.append({
-                            "trade_date": date,
-                            "open_price": base_price * (1 + (np.random.random() - 0.5) * 0.02),
-                            "high_price": base_price * (1 + np.random.random() * 0.03),
-                            "low_price": base_price * (1 - np.random.random() * 0.03),
-                            "close_price": base_price,
-                            "volume": int(np.random.random() * 1000000),
-                            "amount": base_price * int(np.random.random() * 1000000)
-                        })
-                
+            # 使用XtQuantService获取历史数据
+            historical_result = await self.xtquant_service.get_historical_data(
+                stock_code=stock_code,
+                start_date=start_date,
+                end_date=end_date,
+                period=period
+            )
+            
+            if historical_result["success"]:
+                data = historical_result["data"]
                 df = pd.DataFrame(data)
+                
+                # 缓存数据
+                await self.redis_client.set(cache_key, data, expire=3600)  # 1小时缓存
+                
+                return df
             else:
-                # 使用xtdata获取历史数据
-                data = xtdata.get_market_data(
-                    stock_list=[stock_code],
-                    period=period,
-                    start_time=start_date,
-                    end_time=end_date
-                )
-                
-                if data.empty:
-                    return pd.DataFrame()
-                
-                df = data.reset_index()
-                df.columns = [col.lower() for col in df.columns]
-            
-            # 缓存数据
-            await self.redis_client.set(cache_key, df.to_dict('records'), expire=3600)  # 1小时缓存
-            
-            return df
+                logger.error(f"获取{stock_code}历史数据失败: {historical_result.get('error', '未知错误')}")
+                return pd.DataFrame()
             
         except Exception as e:
             logger.error(f"获取{stock_code}历史数据失败: {e}")

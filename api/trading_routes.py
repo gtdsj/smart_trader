@@ -365,25 +365,37 @@ async def get_positions(service: TradingService = Depends(get_trading_service)):
     """查询持仓"""
     try:
         positions = await service.get_positions()
-        return ApiResponse(
-            success=True,
-            message="查询持仓成功",
-            data=positions
-        )
+        
+        # 检查是否成功获取到持仓数据
+        if positions is not None:
+            return ApiResponse(
+                success=True,
+                message="查询持仓成功" if positions else "当前无持仓",
+                data=positions
+            )
+        else:
+            return ApiResponse(
+                success=False,
+                message="查询持仓失败，请检查交易服务连接状态",
+                data=[]
+            )
     except Exception as e:
         logger.error(f"查询持仓失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # 返回友好的错误信息而不是抛出异常
+        return ApiResponse(
+            success=False,
+            message=f"查询持仓失败: {str(e)}",
+            data=[]
+        )
 
 
-@router.get("/positions/{stock_code}", response_model=ApiResponse, summary="查询单个持仓")
-async def get_position(
-    stock_code: str,
-    service: TradingService = Depends(get_trading_service)
-):
-    """查询单个持仓"""
+@router.get("/positions/{stock_code}", response_model=ApiResponse, summary="查询指定股票持仓")
+async def get_position(stock_code: str, service: TradingService = Depends(get_trading_service)):
+    """查询指定股票持仓"""
     try:
         position = await service.get_position(stock_code)
-        if position:
+        
+        if position is not None:
             return ApiResponse(
                 success=True,
                 message="查询持仓成功",
@@ -391,13 +403,18 @@ async def get_position(
             )
         else:
             return ApiResponse(
-                success=True,
-                message="无持仓",
+                success=False,
+                message=f"未找到股票 {stock_code} 的持仓信息",
                 data=None
             )
     except Exception as e:
         logger.error(f"查询持仓失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # 返回友好的错误信息而不是抛出异常
+        return ApiResponse(
+            success=False,
+            message=f"查询持仓失败: {str(e)}",
+            data=None
+        )
 
 
 @router.get("/asset", response_model=ApiResponse, summary="查询资产")

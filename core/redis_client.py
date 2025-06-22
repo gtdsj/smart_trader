@@ -5,7 +5,7 @@ Redis客户端模块
 
 import json
 from typing import Any, Optional, Dict, List
-from aioredis import Redis, from_url
+import aioredis
 from loguru import logger
 
 from config import get_settings
@@ -15,12 +15,12 @@ class RedisClient:
     """Redis客户端封装"""
     
     def __init__(self):
-        self.redis: Optional[Redis] = None
+        self.redis: Optional[aioredis.Redis] = None
     
     async def connect(self):
         """连接Redis"""
         settings = get_settings()
-        self.redis = from_url(settings.redis.url, decode_responses=True)
+        self.redis = await aioredis.from_url(settings.redis.url, decode_responses=True)
         
         # 测试连接
         await self.redis.ping()

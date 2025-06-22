@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 try:
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError:
+    # 兼容旧版本pydantic
     from pydantic import BaseSettings
     SettingsConfigDict = None
 
@@ -86,6 +87,9 @@ class SystemConfig(BaseModel):
     version: str = Field(default="1.0.0", description="版本号")
     debug: bool = Field(default=True, description="调试模式")
     log_level: str = Field(default="INFO", description="日志级别")
+    log_dir: str = Field(default="logs", description="日志文件目录")
+    log_file_prefix: str = Field(default="app", description="日志文件前缀")
+    max_log_files: int = Field(default=30, description="最大日志文件数", ge=1, le=365)
     
     # API配置
     api_host: str = Field(default="0.0.0.0", description="API主机")
@@ -139,6 +143,9 @@ class ConfigManager:
             'VERSION': ['version'],
             'DEBUG': ['debug'],
             'LOG_LEVEL': ['log_level'],
+            'LOG_DIR': ['log_dir'],
+            'LOG_FILE_PREFIX': ['log_file_prefix'],
+            'MAX_LOG_FILES': ['max_log_files'],
             'API_HOST': ['api_host'],
             'API_PORT': ['api_port'],
             

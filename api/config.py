@@ -148,14 +148,14 @@ def update_database_config(request: DatabaseConfigRequest):
 def get_trading_config():
     """获取交易配置"""
     try:
-        # 模拟交易配置数据
+        # 从实际配置获取交易配置数据
         config_data = {
-            "max_position_size": 0.1,
-            "commission_rate": 0.0003,
-            "slippage": 0.001,
-            "risk_level": "medium",
-            "auto_trading": False,
-            "max_orders_per_day": 100
+            "max_position_size": getattr(settings.trading, 'max_position_size', None),
+            "commission_rate": getattr(settings.trading, 'commission_rate', None),
+            "slippage": getattr(settings.trading, 'slippage', None),
+            "risk_level": getattr(settings.trading, 'risk_level', None),
+            "auto_trading": getattr(settings.trading, 'auto_trading', None),
+            "max_orders_per_day": getattr(settings.trading, 'max_orders_per_day', None)
         }
         
         return ApiResponse(
@@ -193,13 +193,13 @@ def update_trading_config(request: TradingConfigRequest):
 def get_xtquant_config():
     """获取XtQuant配置"""
     try:
-        # 模拟XtQuant配置数据
+        # 从实际配置获取XtQuant配置数据
         config_data = {
-            "path": "D:\\迅投极速交易终端 睿智融科版\\userdata_mini",
-            "session_id": 123456,
-            "account_id": "1000000365",
-            "account_type": "STOCK",
-            "connected": False
+            "path": settings.xtquant.path,
+            "session_id": settings.xtquant.session_id,
+            "account_id": settings.xtquant.account_id,
+            "account_type": settings.xtquant.account_type,
+            "connected": False  # 这个需要从服务状态获取
         }
         
         return ApiResponse(
@@ -237,13 +237,13 @@ def update_xtquant_config(request: XtQuantConfigRequest):
 def get_notification_config():
     """获取通知配置"""
     try:
-        # 模拟通知配置数据
+        # 从实际配置获取通知配置数据
         config_data = {
-            "enabled": True,
-            "channels": ["dingtalk", "email"],
-            "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=xxx",
-            "email_smtp": "smtp.qq.com",
-            "email_port": 587
+            "enabled": getattr(settings.notification, 'enabled', None),
+            "channels": getattr(settings.notification, 'channels', []),
+            "webhook_url": getattr(settings.notification, 'webhook_url', None),
+            "email_smtp": getattr(settings.notification, 'email_smtp', None),
+            "email_port": getattr(settings.notification, 'email_port', None)
         }
         
         return ApiResponse(

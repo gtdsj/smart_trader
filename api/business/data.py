@@ -9,13 +9,17 @@ from pydantic import BaseModel
 from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 
-from config_simple import get_settings
+from config import get_settings
+from services.data_service import DataService
+from services.xtquant_service import XtQuantService
 
 # 创建数据业务路由器
 router = APIRouter(prefix="/data", tags=["数据业务"])
 
-# 获取配置
+# 获取配置和服务
 settings = get_settings()
+data_service = DataService()
+xtquant_service = XtQuantService()
 
 # 响应模型类
 class ApiResponse:
@@ -52,31 +56,30 @@ class RealtimeDataRequest(BaseModel):
     fields: Optional[List[str]] = ["last_price", "volume", "amount", "bid1", "ask1"]
 
 @router.get("/", summary="数据概览", description="获取数据服务概览信息")
-def get_data_overview():
+async def get_data_overview():
     """获取数据概览"""
     try:
+        # 检查XtQuant连接状态
+        xtquant_connected = xtquant_service.is_connected
+        
+        # 检查市场状态
+        is_trading_time = data_service._is_trading_time()
+        
         overview = {
             "data_source": {
                 "provider": "XtQuant",
-                "status": "connected",  # 从实际连接状态获取
+                "status": "connected" if xtquant_connected else "disconnected",
                 "last_update": datetime.now().isoformat()
             },
             "market_status": {
-                "sh_status": "closed",  # 上海市场状态
-                "sz_status": "closed",  # 深圳市场状态
+                "is_trading_time": is_trading_time,
                 "trading_day": datetime.now().strftime("%Y-%m-%d"),
-                "next_trading_day": "2024-01-02"  # 可以计算下一个交易日
+                "current_time": datetime.now().strftime("%H:%M:%S")
             },
-            "data_statistics": {
-                "total_stocks": 5000,  # 从数据库获取
-                "active_stocks": 4800,
-                "suspended_stocks": 200,
-                "today_updated": 4800
-            },
-            "cache_status": {
-                "realtime_cache": "active",
-                "history_cache": "active",
-                "cache_hit_rate": 0.85
+            "service_status": {
+                "data_service": "running",
+                "xtquant_service": "connected" if xtquant_connected else "disconnected",
+                "cache_status": "active"
             }
         }
         
@@ -89,7 +92,7 @@ def get_data_overview():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/stocks", summary="股票列表", description="获取股票列表")
-def get_stock_list(
+async def get_stock_list(
     market: str = Query("all", description="市场代码：SH, SZ, all"),
     stock_type: str = Query("stock", description="股票类型：stock, index, etf"),
     status: str = Query("active", description="状态：active, suspended, delisted"),
@@ -97,43 +100,23 @@ def get_stock_list(
 ):
     """获取股票列表"""
     try:
-        # 这里可以从XtQuant或数据库获取实际股票列表
-        stocks = [
-            {
-                "stock_code": "600000.SH",
-                "stock_name": "浦发银行",
-                "market": "SH",
-                "stock_type": "stock",
-                "industry": "银行",
-                "sector": "金融",
-                "list_date": "1999-11-10",
-                "status": "active",
-                "last_price": 10.52,
-                "change_ratio": 0.0038,
-                "volume": 12345678,
-                "amount": 129876543.21,
-                "market_cap": 3087654321.0,
-                "pe_ratio": 5.23,
-                "pb_ratio": 0.65
-            },
-            {
-                "stock_code": "000001.SZ",
-                "stock_name": "平安银行",
-                "market": "SZ",
-                "stock_type": "stock",
-                "industry": "银行",
-                "sector": "金融",
-                "list_date": "1991-04-03",
-                "status": "active",
-                "last_price": 12.34,
-                "change_ratio": -0.0081,
-                "volume": 23456789,
-                "amount": 289765432.10,
-                "market_cap": 2398765432.0,
-                "pe_ratio": 4.87,
-                "pb_ratio": 0.72
-            }
-        ]
+        # 使用DataService获取股票列表
+        stock_list = await data_service.get_stock_list(market)
+        
+        if not stock_list:
+            stocks = []
+        else:
+            # 转换为API响应格式
+            stocks = []
+            for stock in stock_list:
+                stock_info = {
+                    "stock_code": stock.get("code", ""),
+                    "stock_name": stock.get("name", ""),
+                    "market": stock.get("market", ""),
+                    "stock_type": stock_type,
+                    "status": status
+                }
+                stocks.append(stock_info)
         
         # 根据参数过滤
         if market != "all":
@@ -166,48 +149,56 @@ def get_stock_list(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/history", summary="历史数据", description="获取股票历史数据")
-def get_history_data(request: HistoryDataRequest):
+async def get_history_data(request: HistoryDataRequest):
     """获取历史数据"""
     try:
-        # 这里可以从XtQuant获取实际历史数据
+        # 使用DataService获取历史数据
         history_data = {}
         
         for stock_code in request.stock_codes:
-            # 模拟历史数据
-            data_points = [
-                {
-                    "date": "2024-01-01",
-                    "open": 10.50,
-                    "high": 10.68,
-                    "low": 10.42,
-                    "close": 10.52,
-                    "volume": 12345678,
-                    "amount": 129876543.21,
-                    "change": 0.04,
-                    "change_ratio": 0.0038
-                },
-                {
-                    "date": "2024-01-02",
-                    "open": 10.52,
-                    "high": 10.75,
-                    "low": 10.48,
-                    "close": 10.63,
-                    "volume": 15678901,
-                    "amount": 166543210.98,
-                    "change": 0.11,
-                    "change_ratio": 0.0105
-                }
-            ]
+            # 获取历史数据
+            data = await data_service.get_historical_data(
+                stock_code=stock_code,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                period=request.period
+            )
             
-            history_data[stock_code] = {
-                "stock_code": stock_code,
-                "period": request.period,
-                "adjust": request.adjust,
-                "start_date": request.start_date,
-                "end_date": request.end_date,
-                "data": data_points,
-                "count": len(data_points)
-            }
+            if data:
+                # 转换为API响应格式
+                data_points = []
+                for item in data:
+                    data_point = {
+                        "date": item.get("date", ""),
+                        "open": item.get("open", 0.0),
+                        "high": item.get("high", 0.0),
+                        "low": item.get("low", 0.0),
+                        "close": item.get("close", 0.0),
+                        "volume": item.get("volume", 0),
+                        "amount": item.get("amount", 0.0)
+                    }
+                    data_points.append(data_point)
+                
+                history_data[stock_code] = {
+                    "stock_code": stock_code,
+                    "period": request.period,
+                    "adjust": request.adjust,
+                    "start_date": request.start_date,
+                    "end_date": request.end_date,
+                    "data": data_points,
+                    "count": len(data_points)
+                }
+            else:
+                # 如果没有数据，返回空数据
+                history_data[stock_code] = {
+                    "stock_code": stock_code,
+                    "period": request.period,
+                    "adjust": request.adjust,
+                    "start_date": request.start_date,
+                    "end_date": request.end_date,
+                    "data": [],
+                    "count": 0
+                }
         
         result = {
             "request_info": {
@@ -231,46 +222,50 @@ def get_history_data(request: HistoryDataRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/realtime", summary="实时数据", description="获取股票实时数据")
-def get_realtime_data(request: RealtimeDataRequest):
+async def get_realtime_data(request: RealtimeDataRequest):
     """获取实时数据"""
     try:
-        # 这里可以从XtQuant获取实际实时数据
+        # 使用DataService获取实时数据
         realtime_data = {}
         
         for stock_code in request.stock_codes:
-            # 模拟实时数据
-            data = {
-                "stock_code": stock_code,
-                "last_price": 10.52,
-                "open": 10.50,
-                "high": 10.68,
-                "low": 10.42,
-                "pre_close": 10.48,
-                "change": 0.04,
-                "change_ratio": 0.0038,
-                "volume": 12345678,
-                "amount": 129876543.21,
-                "turnover_rate": 0.0234,
-                "bid1": 10.51,
-                "bid1_volume": 12300,
-                "ask1": 10.52,
-                "ask1_volume": 15600,
-                "bid_volumes": [12300, 23400, 34500, 45600, 56700],
-                "ask_volumes": [15600, 26700, 37800, 48900, 59000],
-                "bid_prices": [10.51, 10.50, 10.49, 10.48, 10.47],
-                "ask_prices": [10.52, 10.53, 10.54, 10.55, 10.56],
-                "timestamp": datetime.now().isoformat()
-            }
+            # 获取实时数据
+            data = await data_service.get_realtime_data(request.stock_codes)
             
-            # 根据请求字段过滤数据
-            if request.fields:
-                filtered_data = {"stock_code": stock_code}
-                for field in request.fields:
-                    if field in data:
-                        filtered_data[field] = data[field]
-                realtime_data[stock_code] = filtered_data
+            if data and stock_code in data:
+                stock_data = data[stock_code]
+                # 转换为API响应格式
+                formatted_data = {
+                    "stock_code": stock_code,
+                    "last_price": stock_data.get("last_price", 0.0),
+                    "open": stock_data.get("open", 0.0),
+                    "high": stock_data.get("high", 0.0),
+                    "low": stock_data.get("low", 0.0),
+                    "pre_close": stock_data.get("pre_close", 0.0),
+                    "change": stock_data.get("change", 0.0),
+                    "change_ratio": stock_data.get("change_ratio", 0.0),
+                    "volume": stock_data.get("volume", 0),
+                    "amount": stock_data.get("amount", 0.0),
+                    "bid1": stock_data.get("bid1", 0.0),
+                    "ask1": stock_data.get("ask1", 0.0),
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                # 根据请求字段过滤数据
+                if request.fields:
+                    filtered_data = {"stock_code": stock_code}
+                    for field in request.fields:
+                        if field in formatted_data:
+                            filtered_data[field] = formatted_data[field]
+                    realtime_data[stock_code] = filtered_data
+                else:
+                    realtime_data[stock_code] = formatted_data
             else:
-                realtime_data[stock_code] = data
+                # 如果没有数据，返回基本信息
+                realtime_data[stock_code] = {
+                    "stock_code": stock_code,
+                    "error": "数据获取失败"
+                }
         
         result = {
             "request_info": {

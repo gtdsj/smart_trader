@@ -9,13 +9,17 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from config_simple import get_settings
+from config import get_settings
+from services.trading_service import TradingService
+from services.xtquant_service import XtQuantService
 
 # 创建交易业务路由器
 router = APIRouter(prefix="/trading", tags=["交易业务"])
 
-# 获取配置
+# 获取配置和服务
 settings = get_settings()
+trading_service = TradingService()
+xtquant_service = XtQuantService()
 
 # 响应模型类
 class ApiResponse:
@@ -52,31 +56,41 @@ class PositionRequest(BaseModel):
     position_type: Optional[str] = "all"  # all, long, short
 
 @router.get("/", summary="交易概览", description="获取交易系统概览信息")
-def get_trading_overview():
+async def get_trading_overview():
     """获取交易概览"""
     try:
+        # 获取账户资产信息
+        account_asset = await trading_service.get_account_asset()
+        
+        # 获取持仓信息
+        positions = await trading_service.get_positions()
+        
+        # 获取今日订单
+        today_orders = await trading_service.get_orders()
+        
+        # 检查连接状态
+        is_connected = trading_service.connected
+        
         overview = {
             "account": {
-                "account_id": getattr(settings.xtquant, 'account_id', ''),
-                "account_type": getattr(settings.xtquant, 'account_type', 'STOCK'),
-                "status": "active"  # 从XtQuant获取实际状态
+                "account_id": settings.xtquant.account_id,
+                "account_type": "STOCK",
+                "status": "connected" if is_connected else "disconnected",
+                "total_asset": account_asset.get("total_asset", 0.0) if account_asset else 0.0,
+                "available_cash": account_asset.get("cash", 0.0) if account_asset else 0.0
             },
             "market": {
-                "status": "closed",  # 根据时间判断市场状态
                 "trading_day": datetime.now().strftime("%Y-%m-%d"),
-                "session": "after_hours"  # morning, afternoon, after_hours
+                "current_time": datetime.now().strftime("%H:%M:%S")
             },
             "statistics": {
-                "today_orders": 0,  # 从数据库获取
-                "today_trades": 0,  # 从数据库获取
-                "today_pnl": 0.0,  # 计算今日盈亏
-                "total_positions": 0  # 当前持仓数量
+                "today_orders": len(today_orders) if today_orders else 0,
+                "total_positions": len(positions) if positions else 0,
+                "position_value": sum(pos.get("market_value", 0.0) for pos in positions) if positions else 0.0
             },
-            "risk_control": {
-                "status": "normal",  # normal, warning, danger
-                "daily_loss_ratio": 0.0,
-                "position_ratio": 0.0,
-                "available_cash_ratio": 1.0
+            "service_status": {
+                "trading_service": "running",
+                "xtquant_connection": "connected" if is_connected else "disconnected"
             }
         }
         
@@ -89,87 +103,100 @@ def get_trading_overview():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/order", summary="下单", description="提交股票交易订单")
-def place_order(order_request: OrderRequest):
+async def place_order(order_request: OrderRequest):
     """下单"""
     try:
-        # 这里可以实现实际的下单逻辑
-        # 1. 验证订单参数
-        # 2. 检查风控规则
-        # 3. 调用XtQuant下单接口
-        # 4. 记录订单到数据库
+        # 使用TradingService进行下单
+        order_result = await trading_service.place_order(
+            stock_code=order_request.stock_code,
+            order_type=order_request.order_type,
+            volume=order_request.volume,
+            price_type=order_request.price_type,
+            price=order_request.price,
+            strategy_name=order_request.strategy_name,
+            remark=order_request.remark
+        )
         
-        order_result = {
-            "order_id": f"ORDER_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            "stock_code": order_request.stock_code,
-            "order_type": order_request.order_type,
-            "volume": order_request.volume,
-            "price_type": order_request.price_type,
-            "price": order_request.price,
-            "status": "submitted",  # submitted, filled, cancelled, rejected
-            "strategy_name": order_request.strategy_name,
-            "remark": order_request.remark,
-            "submitted_at": datetime.now().isoformat(),
-            "estimated_amount": (order_request.price or 0) * order_request.volume
-        }
+        if order_result:
+            # 转换为API响应格式
+            response_data = {
+                "order_id": order_result.get("order_id", ""),
+                "stock_code": order_request.stock_code,
+                "order_type": order_request.order_type,
+                "volume": order_request.volume,
+                "price_type": order_request.price_type,
+                "price": order_request.price,
+                "status": order_result.get("status", "submitted"),
+                "strategy_name": order_request.strategy_name,
+                "remark": order_request.remark,
+                "submitted_at": datetime.now().isoformat(),
+                "estimated_amount": (order_request.price or 0) * order_request.volume
+            }
+        else:
+            raise HTTPException(status_code=400, detail="下单失败")
         
         return ApiResponse(
             message="订单提交成功",
-            data=order_result
+            data=response_data
         ).to_dict()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/order/{order_id}", summary="撤单", description="取消指定订单")
-def cancel_order(order_id: str, cancel_request: CancelOrderRequest):
+async def cancel_order(order_id: str, cancel_request: CancelOrderRequest):
     """撤单"""
     try:
-        # 这里可以实现实际的撤单逻辑
-        # 1. 验证订单存在
-        # 2. 检查订单状态
-        # 3. 调用XtQuant撤单接口
-        # 4. 更新订单状态
+        # 使用TradingService进行撤单
+        cancel_result = await trading_service.cancel_order(order_id)
         
-        cancel_result = {
-            "order_id": order_id,
-            "original_status": "submitted",
-            "new_status": "cancelled",
-            "reason": cancel_request.reason,
-            "cancelled_at": datetime.now().isoformat(),
-            "cancelled_volume": 0,  # 实际撤销数量
-            "filled_volume": 0  # 已成交数量
-        }
+        if cancel_result:
+            # 转换为API响应格式
+            response_data = {
+                "order_id": order_id,
+                "original_status": cancel_result.get("original_status", "unknown"),
+                "new_status": "cancelled",
+                "reason": cancel_request.reason,
+                "cancelled_at": datetime.now().isoformat(),
+                "success": cancel_result.get("success", False)
+            }
+        else:
+            raise HTTPException(status_code=400, detail="撤单失败")
         
         return ApiResponse(
             message="订单撤销成功",
-            data=cancel_result
+            data=response_data
         ).to_dict()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/orders", summary="订单列表", description="获取订单列表")
-def get_orders(date: Optional[str] = None, status: Optional[str] = None, limit: int = 100):
+async def get_orders(date: Optional[str] = None, status: Optional[str] = None, limit: int = 100):
     """获取订单列表"""
     try:
-        # 这里可以从数据库或XtQuant获取订单列表
-        orders = [
-            {
-                "order_id": "ORDER_20240101_093000",
-                "stock_code": "600000.SH",
-                "stock_name": "浦发银行",
-                "order_type": "BUY",
-                "volume": 1000,
-                "price_type": "LIMIT",
-                "price": 10.50,
-                "status": "filled",
-                "filled_volume": 1000,
-                "filled_price": 10.48,
-                "strategy_name": "manual",
-                "submitted_at": "2024-01-01T09:30:00",
-                "updated_at": "2024-01-01T09:30:15"
-            }
-        ]
+        # 使用TradingService获取订单列表
+        orders_data = await trading_service.get_orders()
+        
+        if orders_data:
+            # 转换为API响应格式
+            orders = []
+            for order in orders_data:
+                order_info = {
+                    "order_id": order.get("order_id", ""),
+                    "stock_code": order.get("stock_code", ""),
+                    "order_type": order.get("order_type", ""),
+                    "volume": order.get("volume", 0),
+                    "price_type": order.get("price_type", ""),
+                    "price": order.get("price", 0.0),
+                    "status": order.get("status", ""),
+                    "strategy_name": order.get("strategy_name", ""),
+                    "submitted_at": order.get("created_at", ""),
+                    "updated_at": order.get("updated_at", "")
+                }
+                orders.append(order_info)
+        else:
+            orders = []
         
         result = {
             "orders": orders,
@@ -234,26 +261,31 @@ def get_order_detail(order_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/positions", summary="持仓列表", description="获取当前持仓列表")
-def get_positions(position_request: PositionRequest = PositionRequest()):
+async def get_positions(position_request: PositionRequest = PositionRequest()):
     """获取持仓列表"""
     try:
-        # 这里可以从XtQuant获取实际持仓
-        positions = [
-            {
-                "stock_code": "600000.SH",
-                "stock_name": "浦发银行",
-                "volume": 1000,
-                "available_volume": 1000,
-                "avg_cost": 10.48,
-                "current_price": 10.52,
-                "market_value": 10520.0,
-                "cost_value": 10480.0,
-                "pnl": 40.0,
-                "pnl_ratio": 0.0038,
-                "position_ratio": 0.105,  # 占总资产比例
-                "last_update": datetime.now().isoformat()
-            }
-        ]
+        # 使用TradingService获取持仓数据
+        positions_data = await trading_service.get_positions()
+        
+        if positions_data:
+            # 转换为API响应格式
+            positions = []
+            for pos in positions_data:
+                position_info = {
+                    "stock_code": pos.get("stock_code", ""),
+                    "volume": pos.get("volume", 0),
+                    "available_volume": pos.get("available_volume", 0),
+                    "avg_cost": pos.get("avg_cost", 0.0),
+                    "current_price": pos.get("current_price", 0.0),
+                    "market_value": pos.get("market_value", 0.0),
+                    "cost_value": pos.get("cost_value", 0.0),
+                    "pnl": pos.get("pnl", 0.0),
+                    "pnl_ratio": pos.get("pnl_ratio", 0.0),
+                    "last_update": datetime.now().isoformat()
+                }
+                positions.append(position_info)
+        else:
+            positions = []
         
         # 计算汇总信息
         summary = {

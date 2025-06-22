@@ -618,9 +618,24 @@ async def update_system_config(
         
         # 系统配置更新需要特殊处理，因为可能需要重启服务
         if request.log_level is not None:
+            from pathlib import Path
+            from config import get_settings
+            
+            # 获取当前配置
+            settings = get_settings()
+            
+            # 确保日志目录存在
+            log_dir = Path(settings.log_dir)
+            log_dir.mkdir(parents=True, exist_ok=True)
+            
             # 更新日志级别
             logger.remove()
-            logger.add("logs/smart_trader.log", level=request.log_level, rotation="1 day")
+            logger.add(
+                log_dir / f"{settings.log_file_prefix}_{{time:YYYY-MM-DD}}.log",
+                level=request.log_level,
+                rotation="1 day",
+                retention=f"{settings.max_log_files} days"
+            )
             updated_fields.append("log_level")
         
         # 其他系统配置项的更新逻辑...

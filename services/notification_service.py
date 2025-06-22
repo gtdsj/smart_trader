@@ -178,7 +178,7 @@ class NotificationService:
             logger.error(f"保存通知日志失败: {e}")
     
     async def send_dingtalk_notification(self, title: str, content: str, 
-                                       notification_type: NotificationType = NotificationType.INFO,
+                                       notification_type: NotificationType = NotificationType.TRADE_SIGNAL,
                                        level: NotificationLevel = NotificationLevel.INFO,
                                        at_mobiles: Optional[List[str]] = None,
                                        at_all: bool = False) -> bool:

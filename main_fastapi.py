@@ -13,9 +13,15 @@ from typing import Optional, Dict, Any
 import uvicorn
 
 # 导入配置和核心模块
-from config_simple import get_settings
+from config import get_settings
 from core.local_cache import get_cache, init_cache
 from core.duckdb_adapter import get_duckdb, init_duckdb
+
+# 导入业务API路由
+from api.business.data import router as data_router
+from api.business.trading import router as trading_router
+from api.business.strategy import router as strategy_router
+from api.business.notification import router as notification_router
 
 # 简单的日志函数
 def log_info(msg):
@@ -36,6 +42,12 @@ app = FastAPI(
     description="智能量化交易系统API",
     version=settings.version
 )
+
+# 注册业务API路由
+app.include_router(data_router, prefix="/api")
+app.include_router(trading_router, prefix="/api")
+app.include_router(strategy_router, prefix="/api")
+app.include_router(notification_router, prefix="/api")
 
 # 响应模型类
 class ApiResponse:

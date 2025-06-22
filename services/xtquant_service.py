@@ -1,0 +1,822 @@
+# -*- coding: utf-8 -*-
+"""
+XtQuant数据和交易服务模块
+提供完整的xtquant功能封装，包括数据获取、实时订阅、交易委托等
+"""
+
+import asyncio
+import time
+from typing import Dict, List, Optional, Any, Tuple, Callable
+from datetime import datetime, timedelta
+import pandas as pd
+from loguru import logger
+from enum import Enum
+
+try:
+    from xtquant.xttrader import XtQuantTrader, XtQuantTraderCallback
+    from xtquant.xttype import StockAccount
+    from xtquant import xtconstant
+    import xtdata
+except ImportError:
+    logger.warning("xtquant模块未安装，相关功能将受限")
+    XtQuantTrader = None
+    XtQuantTraderCallback = None
+    StockAccount = None
+    xtconstant = None
+    xtdata = None
+
+from config import get_settings
+from core.redis_client import get_redis
+from services.notification_service import NotificationService
+
+
+class Period(Enum):
+    """K线周期枚举"""
+    TICK = "tick"  # 分笔
+    MIN1 = "1m"    # 1分钟
+    MIN5 = "5m"    # 5分钟
+    MIN15 = "15m"  # 15分钟
+    MIN30 = "30m"  # 30分钟
+    MIN60 = "1h"   # 1小时
+    DAILY = "1d"   # 日线
+    WEEKLY = "1w"  # 周线
+    MONTHLY = "1M" # 月线
+
+
+class XtQuantDataCallback:
+    """XtQuant数据回调类"""
+    
+    def __init__(self, xtquant_service):
+        self.xtquant_service = xtquant_service
+    
+    def on_data(self, datas):
+        """数据推送回调"""
+        try:
+            for stock_code, data in datas.items():
+                # 处理实时数据推送
+                asyncio.create_task(
+                    self.xtquant_service._handle_realtime_data(stock_code, data)
+                )
+        except Exception as e:
+            logger.error(f"处理实时数据回调失败: {e}")
+
+
+if XtQuantTraderCallback is not None:
+    class XtQuantTradingCallback(XtQuantTraderCallback):
+        """XtQuant交易回调类"""
+        
+        def __init__(self, xtquant_service):
+            super().__init__()
+            self.xtquant_service = xtquant_service
+else:
+    class XtQuantTradingCallback:
+        """XtQuant交易回调类（模拟）"""
+        
+        def __init__(self, xtquant_service):
+            self.xtquant_service = xtquant_service
+        
+        def on_disconnected(self):
+            """连接断开回调"""
+            logger.warning("XtQuant交易连接断开")
+            self.xtquant_service.is_trading_connected = False
+            asyncio.create_task(
+                self.xtquant_service.notification_service.send_system_error_notification(
+                    error_type="交易连接断开",
+                    error_message="与XtQuant交易服务器的连接已断开",
+                    module="XtQuantService"
+                )
+            )
+        
+        def on_stock_order(self, order):
+            """委托回报推送"""
+            logger.info(f"订单回报: {order.stock_code}, 状态: {order.order_status}, 系统订单号: {order.order_sysid}")
+            asyncio.create_task(
+                self.xtquant_service._handle_order_callback(order)
+            )
+        
+        def on_stock_trade(self, trade):
+            """成交变动推送"""
+            logger.info(f"成交回报: {trade.stock_code}, 订单ID: {trade.order_id}")
+            asyncio.create_task(
+                self.xtquant_service._handle_trade_callback(trade)
+            )
+        
+        def on_order_error(self, order_error):
+            """委托失败推送"""
+            logger.error(f"订单错误: {order_error.order_id}, 错误码: {order_error.error_id}, 错误信息: {order_error.error_msg}")
+            asyncio.create_task(
+                self.xtquant_service._handle_order_error(order_error)
+            )
+        
+        def on_cancel_error(self, cancel_error):
+            """撤单失败推送"""
+            logger.error(f"撤单错误: {cancel_error.order_id}, 错误码: {cancel_error.error_id}, 错误信息: {cancel_error.error_msg}")
+        
+        def on_order_stock_async_response(self, response):
+            """异步下单回报推送"""
+            logger.info(f"异步下单回报: 账户: {response.account_id}, 订单ID: {response.order_id}, 序号: {response.seq}")
+        
+        def on_account_status(self, status):
+            """账户状态推送"""
+            logger.info(f"账户状态: {status.account_id}, 类型: {status.account_type}, 状态: {status.status}")
+
+
+class XtQuantService:
+    """XtQuant服务类"""
+    
+    def __init__(self):
+        self.settings = get_settings()
+        self.redis_client = get_redis()
+        self.notification_service = NotificationService()
+        
+        # 交易相关
+        self.xt_trader = None
+        self.account = None
+        self.trading_callback = None
+        self.is_trading_connected = False
+        
+        # 数据相关
+        self.data_callback = None
+        self.is_data_connected = False
+        self.subscribed_stocks = set()
+        
+        # 回调函数注册
+        self.realtime_data_callbacks = []
+        self.order_callbacks = []
+        self.trade_callbacks = []
+        
+        self.is_running = False
+    
+    async def start(self):
+        """启动XtQuant服务"""
+        if self.is_running:
+            return
+        
+        self.is_running = True
+        logger.info("XtQuant服务启动中...")
+        
+        try:
+            if xtdata is None or XtQuantTrader is None:
+                logger.warning("xtquant未安装，使用模拟模式")
+                return
+            
+            # 初始化数据连接
+            await self._init_data_connection()
+            
+            # 初始化交易连接
+            await self._init_trading_connection()
+            
+            logger.info("XtQuant服务启动完成")
+            
+        except Exception as e:
+            logger.error(f"XtQuant服务启动失败: {e}")
+            await self.notification_service.send_system_error_notification(
+                error_type="XtQuant服务启动失败",
+                error_message=str(e),
+                module="XtQuantService"
+            )
+    
+    async def stop(self):
+        """停止XtQuant服务"""
+        if not self.is_running:
+            return
+        
+        self.is_running = False
+        
+        try:
+            # 取消所有订阅
+            if self.subscribed_stocks and xtdata:
+                for stock_code in self.subscribed_stocks:
+                    xtdata.unsubscribe_quote(stock_code, callback=self.data_callback.on_data)
+                self.subscribed_stocks.clear()
+            
+            # 断开交易连接
+            if self.xt_trader and self.is_trading_connected:
+                # XtQuant可能没有提供显式的断开方法
+                pass
+            
+            logger.info("XtQuant服务已停止")
+            
+        except Exception as e:
+            logger.error(f"停止XtQuant服务失败: {e}")
+    
+    async def _init_data_connection(self):
+        """初始化数据连接"""
+        try:
+            if xtdata is None:
+                return
+            
+            # 连接数据服务器
+            connect_result = xtdata.connect()
+            if not connect_result:
+                raise Exception("连接xtdata失败")
+            
+            # 创建数据回调
+            self.data_callback = XtQuantDataCallback(self)
+            self.is_data_connected = True
+            
+            logger.info("XtQuant数据连接成功")
+            
+        except Exception as e:
+            logger.error(f"初始化数据连接失败: {e}")
+            raise
+    
+    async def _init_trading_connection(self):
+        """初始化交易连接"""
+        try:
+            if XtQuantTrader is None:
+                return
+            
+            # 创建交易对象
+            self.xt_trader = XtQuantTrader(
+                path=self.settings.xtquant.path,
+                session_id=self.settings.xtquant.session_id
+            )
+            
+            # 创建账户对象
+            self.account = StockAccount(
+                account_id=self.settings.xtquant.account_id,
+                account_type=self.settings.xtquant.account_type
+            )
+            
+            # 创建交易回调
+            self.trading_callback = XtQuantTradingCallback(self)
+            self.xt_trader.register_callback(self.trading_callback)
+            
+            # 启动交易线程
+            self.xt_trader.start()
+            
+            # 建立连接
+            connect_result = self.xt_trader.connect()
+            if connect_result != 0:
+                raise Exception(f"连接交易服务器失败，错误码: {connect_result}")
+            
+            # 订阅回调
+            subscribe_result = self.xt_trader.subscribe(self.account)
+            if subscribe_result != 0:
+                raise Exception(f"订阅交易回调失败，错误码: {subscribe_result}")
+            
+            self.is_trading_connected = True
+            logger.info("XtQuant交易连接成功")
+            
+        except Exception as e:
+            logger.error(f"初始化交易连接失败: {e}")
+            raise
+    
+    # ==================== 数据获取功能 ====================
+    
+    async def get_stock_list(self, market: str = "ALL") -> List[Dict[str, Any]]:
+        """获取股票列表"""
+        try:
+            if xtdata is None:
+                raise Exception("XtQuant数据服务未连接，无法获取股票列表")
+            
+            # 获取股票列表
+            if market == "SH":
+                stocks = xtdata.get_stock_list_in_sector("沪股通")
+            elif market == "SZ":
+                stocks = xtdata.get_stock_list_in_sector("深股通")
+            else:
+                sh_stocks = xtdata.get_stock_list_in_sector("沪股通")
+                sz_stocks = xtdata.get_stock_list_in_sector("深股通")
+                stocks = sh_stocks + sz_stocks
+            
+            stock_list = []
+            for stock_code in stocks:
+                # 获取股票基本信息
+                info = xtdata.get_instrument_detail(stock_code)
+                if info:
+                    stock_list.append({
+                        "stock_code": stock_code,
+                        "stock_name": info.get("InstrumentName", ""),
+                        "market": "SH" if stock_code.endswith(".SH") else "SZ"
+                    })
+            
+            return stock_list
+            
+        except Exception as e:
+            logger.error(f"获取股票列表失败: {e}")
+            return []
+    
+    async def get_history_data(self, stock_codes: List[str], period: Period = Period.DAILY,
+                              start_date: str = None, end_date: str = None,
+                              count: int = 100) -> Dict[str, pd.DataFrame]:
+        """获取历史数据"""
+        try:
+            if xtdata is None:
+                raise Exception("XtQuant数据服务未连接，无法获取历史数据")
+            
+            result = {}
+            
+            # 转换周期参数
+            period_map = {
+                Period.TICK: "tick",
+                Period.MIN1: "1m",
+                Period.MIN5: "5m",
+                Period.MIN15: "15m",
+                Period.MIN30: "30m",
+                Period.MIN60: "1h",
+                Period.DAILY: "1d",
+                Period.WEEKLY: "1w",
+                Period.MONTHLY: "1M"
+            }
+            
+            xt_period = period_map.get(period, "1d")
+            
+            for stock_code in stock_codes:
+                try:
+                    # 获取历史数据
+                    if start_date and end_date:
+                        data = xtdata.get_market_data(
+                            stock_list=[stock_code],
+                            period=xt_period,
+                            start_time=start_date,
+                            end_time=end_date
+                        )
+                    else:
+                        data = xtdata.get_market_data(
+                            stock_list=[stock_code],
+                            period=xt_period,
+                            count=count
+                        )
+                    
+                    if data and stock_code in data:
+                        df = data[stock_code]
+                        # 标准化列名
+                        df.columns = ['time', 'open', 'high', 'low', 'close', 'volume', 'amount']
+                        df['time'] = pd.to_datetime(df['time'])
+                        df.set_index('time', inplace=True)
+                        result[stock_code] = df
+                    
+                except Exception as e:
+                    logger.error(f"获取{stock_code}历史数据失败: {e}")
+                    continue
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"获取历史数据失败: {e}")
+            return {}
+    
+    async def get_realtime_data(self, stock_codes: List[str]) -> Dict[str, Dict[str, Any]]:
+        """获取实时数据"""
+        try:
+            if xtdata is None:
+                raise Exception("XtQuant数据服务未连接，无法获取实时数据")
+            
+            result = {}
+            
+            for stock_code in stock_codes:
+                try:
+                    # 获取实时行情
+                    quote = xtdata.get_full_tick([stock_code])
+                    if quote and stock_code in quote:
+                        tick_data = quote[stock_code]
+                        result[stock_code] = {
+                            "stock_code": stock_code,
+                            "last_price": tick_data.get("lastPrice", 0),
+                            "open": tick_data.get("open", 0),
+                            "high": tick_data.get("high", 0),
+                            "low": tick_data.get("low", 0),
+                            "pre_close": tick_data.get("lastClose", 0),
+                            "volume": tick_data.get("volume", 0),
+                            "amount": tick_data.get("amount", 0),
+                            "bid1": tick_data.get("bidPrice", [0])[0] if tick_data.get("bidPrice") else 0,
+                            "ask1": tick_data.get("askPrice", [0])[0] if tick_data.get("askPrice") else 0,
+                            "bid1_volume": tick_data.get("bidVol", [0])[0] if tick_data.get("bidVol") else 0,
+                            "ask1_volume": tick_data.get("askVol", [0])[0] if tick_data.get("askVol") else 0,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        
+                        # 计算涨跌幅
+                        if result[stock_code]["pre_close"] > 0:
+                            change = result[stock_code]["last_price"] - result[stock_code]["pre_close"]
+                            change_ratio = change / result[stock_code]["pre_close"]
+                            result[stock_code]["change"] = change
+                            result[stock_code]["change_ratio"] = change_ratio
+                        else:
+                            result[stock_code]["change"] = 0
+                            result[stock_code]["change_ratio"] = 0
+                    
+                except Exception as e:
+                    logger.error(f"获取{stock_code}实时数据失败: {e}")
+                    continue
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"获取实时数据失败: {e}")
+            return {}
+    
+    async def subscribe_realtime_data(self, stock_codes: List[str], 
+                                    callback: Optional[Callable] = None):
+        """订阅实时数据"""
+        try:
+            if xtdata is None:
+                logger.warning("xtdata未安装，无法订阅实时数据")
+                return
+            
+            # 注册回调函数
+            if callback:
+                self.realtime_data_callbacks.append(callback)
+            
+            for stock_code in stock_codes:
+                if stock_code not in self.subscribed_stocks:
+                    # 订阅实时行情
+                    xtdata.subscribe_quote(
+                        stock_code, 
+                        period="tick", 
+                        callback=self.data_callback.on_data
+                    )
+                    self.subscribed_stocks.add(stock_code)
+                    logger.info(f"订阅{stock_code}实时数据成功")
+            
+        except Exception as e:
+            logger.error(f"订阅实时数据失败: {e}")
+    
+    async def unsubscribe_realtime_data(self, stock_codes: List[str]):
+        """取消订阅实时数据"""
+        try:
+            if xtdata is None:
+                return
+            
+            for stock_code in stock_codes:
+                if stock_code in self.subscribed_stocks:
+                    xtdata.unsubscribe_quote(
+                        stock_code, 
+                        callback=self.data_callback.on_data
+                    )
+                    self.subscribed_stocks.remove(stock_code)
+                    logger.info(f"取消订阅{stock_code}实时数据")
+            
+        except Exception as e:
+            logger.error(f"取消订阅实时数据失败: {e}")
+    
+    # ==================== 交易功能 ====================
+    
+    async def place_order(self, stock_code: str, order_type: str, volume: int,
+                         price: Optional[float] = None, price_type: str = "LIMIT",
+                         strategy_name: str = "manual", remark: str = "") -> Optional[str]:
+        """下单"""
+        try:
+            if not self.is_trading_connected or self.xt_trader is None:
+                logger.warning("交易连接未建立，使用模拟下单")
+                return f"SIM_{int(time.time() * 1000)}"
+            
+            # 转换订单类型
+            xt_order_type = xtconstant.STOCK_BUY if order_type.upper() == "BUY" else xtconstant.STOCK_SELL
+            
+            # 转换价格类型
+            if price_type.upper() == "MARKET":
+                xt_price_type = xtconstant.MARKET_PRICE
+                if price is None:
+                    price = 0  # 市价单价格设为0
+            else:
+                xt_price_type = xtconstant.FIX_PRICE
+                if price is None:
+                    # 获取当前价格
+                    realtime_data = await self.get_realtime_data([stock_code])
+                    if stock_code in realtime_data:
+                        price = realtime_data[stock_code]["last_price"]
+                    else:
+                        raise Exception(f"无法获取{stock_code}当前价格")
+            
+            # 下单
+            order_id = self.xt_trader.order_stock(
+                acc=self.account,
+                stock_code=stock_code,
+                order_type=xt_order_type,
+                order_volume=volume,
+                price_type=xt_price_type,
+                price=price,
+                strategy_name=strategy_name,
+                order_remark=remark
+            )
+            
+            if order_id <= 0:
+                raise Exception(f"下单失败，订单ID: {order_id}")
+            
+            logger.info(f"下单成功: {order_id}, {stock_code}, {order_type}, {volume}股, 价格: {price}")
+            return str(order_id)
+            
+        except Exception as e:
+            logger.error(f"下单失败: {e}")
+            return None
+    
+    async def cancel_order(self, order_id: str) -> bool:
+        """撤单"""
+        try:
+            if not self.is_trading_connected or self.xt_trader is None:
+                logger.warning("交易连接未建立，使用模拟撤单")
+                return True
+            
+            result = self.xt_trader.cancel_order_stock(self.account, int(order_id))
+            if result != 0:
+                logger.error(f"撤单失败，错误码: {result}")
+                return False
+            
+            logger.info(f"撤单成功: {order_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"撤单失败: {e}")
+            return False
+    
+    async def get_account_asset(self) -> Optional[Dict[str, Any]]:
+        """获取账户资产"""
+        try:
+            if not self.is_trading_connected or self.xt_trader is None:
+                raise Exception("XtQuant交易服务未连接，无法获取账户资产")
+            
+            asset = self.xt_trader.query_stock_asset(self.account)
+            if asset:
+                return {
+                    "total_asset": getattr(asset, 'total_asset', 0),
+                    "cash": getattr(asset, 'cash', 0),
+                    "market_value": getattr(asset, 'market_value', 0),
+                    "frozen_cash": getattr(asset, 'frozen_cash', 0),
+                    "available_cash": getattr(asset, 'available_cash', 0),
+                    "profit_loss": getattr(asset, 'profit_loss', 0),
+                    "profit_loss_ratio": getattr(asset, 'profit_loss_ratio', 0)
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"获取账户资产失败: {e}")
+            return None
+    
+    async def get_positions(self) -> List[Dict[str, Any]]:
+        """获取持仓"""
+        try:
+            if not self.is_trading_connected or self.xt_trader is None:
+                raise Exception("XtQuant交易服务未连接，无法获取持仓信息")
+            
+            positions = []
+            xt_positions = self.xt_trader.query_stock_positions(self.account)
+            
+            for pos in xt_positions:
+                # 获取当前价格
+                current_price = 0
+                try:
+                    realtime_data = await self.get_realtime_data([pos.stock_code])
+                    if pos.stock_code in realtime_data:
+                        current_price = realtime_data[pos.stock_code]["last_price"]
+                except:
+                    pass
+                
+                volume = getattr(pos, 'volume', 0)
+                avg_price = getattr(pos, 'avg_price', 0)
+                market_value = volume * current_price if current_price > 0 else getattr(pos, 'market_value', 0)
+                cost_value = volume * avg_price
+                profit_loss = market_value - cost_value
+                profit_loss_ratio = profit_loss / cost_value if cost_value > 0 else 0
+                
+                positions.append({
+                    "stock_code": pos.stock_code,
+                    "stock_name": "",  # 需要从其他地方获取股票名称
+                    "volume": volume,
+                    "available_volume": getattr(pos, 'available_volume', volume),
+                    "avg_price": avg_price,
+                    "current_price": current_price,
+                    "market_value": market_value,
+                    "cost_value": cost_value,
+                    "profit_loss": profit_loss,
+                    "profit_loss_ratio": profit_loss_ratio
+                })
+            
+            return positions
+            
+        except Exception as e:
+            logger.error(f"获取持仓失败: {e}")
+            return []
+    
+    async def get_orders(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """获取订单列表"""
+        try:
+            if not self.is_trading_connected or self.xt_trader is None:
+                raise Exception("XtQuant交易服务未连接，无法获取订单信息")
+            
+            orders = []
+            xt_orders = self.xt_trader.query_stock_orders(self.account)
+            
+            for order in xt_orders[-limit:]:
+                orders.append({
+                    "order_id": str(getattr(order, 'order_id', '')),
+                    "stock_code": getattr(order, 'stock_code', ''),
+                    "stock_name": "",  # 需要从其他地方获取股票名称
+                    "order_type": "BUY" if getattr(order, 'order_type', 0) == xtconstant.STOCK_BUY else "SELL",
+                    "order_price": getattr(order, 'price', 0),
+                    "order_volume": getattr(order, 'order_volume', 0),
+                    "traded_volume": getattr(order, 'traded_volume', 0),
+                    "order_status": self._convert_order_status(getattr(order, 'order_status', 0)),
+                    "order_time": getattr(order, 'order_time', datetime.now()).isoformat() if hasattr(getattr(order, 'order_time', None), 'isoformat') else str(getattr(order, 'order_time', ''))
+                })
+            
+            return orders
+            
+        except Exception as e:
+            logger.error(f"获取订单列表失败: {e}")
+            return []
+    
+    async def get_trades(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """获取成交记录"""
+        try:
+            if not self.is_trading_connected or self.xt_trader is None:
+                raise Exception("XtQuant交易服务未连接，无法获取成交记录")
+            
+            trades = []
+            xt_trades = self.xt_trader.query_stock_trades(self.account)
+            
+            for trade in xt_trades[-limit:]:
+                trades.append({
+                    "trade_id": str(getattr(trade, 'trade_id', '')),
+                    "order_id": str(getattr(trade, 'order_id', '')),
+                    "stock_code": getattr(trade, 'stock_code', ''),
+                    "stock_name": "",  # 需要从其他地方获取股票名称
+                    "trade_type": "BUY" if getattr(trade, 'order_type', 0) == xtconstant.STOCK_BUY else "SELL",
+                    "trade_price": getattr(trade, 'traded_price', 0),
+                    "trade_volume": getattr(trade, 'traded_volume', 0),
+                    "trade_amount": getattr(trade, 'traded_amount', 0),
+                    "trade_time": getattr(trade, 'trade_time', datetime.now()).isoformat() if hasattr(getattr(trade, 'trade_time', None), 'isoformat') else str(getattr(trade, 'trade_time', ''))
+                })
+            
+            return trades
+            
+        except Exception as e:
+            logger.error(f"获取成交记录失败: {e}")
+            return []
+    
+    # ==================== 回调处理 ====================
+    
+    async def _handle_realtime_data(self, stock_code: str, data: Any):
+        """处理实时数据推送"""
+        try:
+            # 缓存到Redis
+            cache_key = f"realtime:{stock_code}"
+            await self.redis_client.setex(
+                cache_key, 
+                300,  # 5分钟过期
+                str(data)
+            )
+            
+            # 调用注册的回调函数
+            for callback in self.realtime_data_callbacks:
+                try:
+                    await callback(stock_code, data)
+                except Exception as e:
+                    logger.error(f"实时数据回调函数执行失败: {e}")
+            
+        except Exception as e:
+            logger.error(f"处理实时数据推送失败: {e}")
+    
+    async def _handle_order_callback(self, order):
+        """处理订单回调"""
+        try:
+            order_data = {
+                "order_id": str(getattr(order, 'order_id', '')),
+                "stock_code": getattr(order, 'stock_code', ''),
+                "order_status": self._convert_order_status(getattr(order, 'order_status', 0)),
+                "traded_volume": getattr(order, 'traded_volume', 0),
+                "order_sysid": getattr(order, 'order_sysid', '')
+            }
+            
+            # 调用注册的回调函数
+            for callback in self.order_callbacks:
+                try:
+                    await callback(order_data)
+                except Exception as e:
+                    logger.error(f"订单回调函数执行失败: {e}")
+            
+        except Exception as e:
+            logger.error(f"处理订单回调失败: {e}")
+    
+    async def _handle_trade_callback(self, trade):
+        """处理成交回调"""
+        try:
+            trade_data = {
+                "trade_id": str(getattr(trade, 'trade_id', '')),
+                "order_id": str(getattr(trade, 'order_id', '')),
+                "stock_code": getattr(trade, 'stock_code', ''),
+                "traded_volume": getattr(trade, 'traded_volume', 0),
+                "traded_price": getattr(trade, 'traded_price', 0),
+                "account_id": getattr(trade, 'account_id', '')
+            }
+            
+            # 调用注册的回调函数
+            for callback in self.trade_callbacks:
+                try:
+                    await callback(trade_data)
+                except Exception as e:
+                    logger.error(f"成交回调函数执行失败: {e}")
+            
+        except Exception as e:
+            logger.error(f"处理成交回调失败: {e}")
+    
+    async def _handle_order_error(self, order_error):
+        """处理订单错误"""
+        try:
+            await self.notification_service.send_system_error_notification(
+                error_type="订单错误",
+                error_message=f"订单{order_error.order_id}错误: {order_error.error_msg} (错误码: {order_error.error_id})",
+                module="XtQuantService"
+            )
+        except Exception as e:
+            logger.error(f"处理订单错误失败: {e}")
+    
+    # ==================== 工具方法 ====================
+    
+    def _convert_order_status(self, status: int) -> str:
+        """转换订单状态"""
+        status_map = {
+            0: "PENDING",      # 待成交
+            1: "PARTIAL_FILLED", # 部分成交
+            2: "FILLED",       # 全部成交
+            3: "CANCELLED",    # 已撤销
+            4: "REJECTED",     # 已拒绝
+            5: "ERROR"         # 错误
+        }
+        return status_map.get(status, "UNKNOWN")
+    
+    def _generate_mock_history_data(self, stock_codes: List[str], count: int) -> Dict[str, pd.DataFrame]:
+        """生成模拟历史数据"""
+        result = {}
+        
+        for stock_code in stock_codes:
+            # 生成模拟数据
+            dates = pd.date_range(end=datetime.now(), periods=count, freq='D')
+            base_price = 10.0
+            
+            data = []
+            for i, date in enumerate(dates):
+                price = base_price + (i % 10 - 5) * 0.1
+                data.append({
+                    'open': price,
+                    'high': price * 1.02,
+                    'low': price * 0.98,
+                    'close': price,
+                    'volume': 1000000 + (i % 100) * 10000,
+                    'amount': price * (1000000 + (i % 100) * 10000)
+                })
+            
+            df = pd.DataFrame(data, index=dates)
+            result[stock_code] = df
+        
+        return result
+    
+    def _generate_mock_realtime_data(self, stock_codes: List[str]) -> Dict[str, Dict[str, Any]]:
+        """生成模拟实时数据"""
+        result = {}
+        
+        for stock_code in stock_codes:
+            result[stock_code] = {
+                "stock_code": stock_code,
+                "last_price": 10.52,
+                "open": 10.50,
+                "high": 10.68,
+                "low": 10.42,
+                "pre_close": 10.48,
+                "change": 0.04,
+                "change_ratio": 0.0038,
+                "volume": 12345678,
+                "amount": 129876543.21,
+                "bid1": 10.51,
+                "ask1": 10.53,
+                "bid1_volume": 100,
+                "ask1_volume": 200,
+                "timestamp": datetime.now().isoformat()
+            }
+        
+        return result
+    
+    # ==================== 回调注册 ====================
+    
+    def register_realtime_data_callback(self, callback: Callable):
+        """注册实时数据回调"""
+        if callback not in self.realtime_data_callbacks:
+            self.realtime_data_callbacks.append(callback)
+    
+    def register_order_callback(self, callback: Callable):
+        """注册订单回调"""
+        if callback not in self.order_callbacks:
+            self.order_callbacks.append(callback)
+    
+    def register_trade_callback(self, callback: Callable):
+        """注册成交回调"""
+        if callback not in self.trade_callbacks:
+            self.trade_callbacks.append(callback)
+    
+    def unregister_realtime_data_callback(self, callback: Callable):
+        """取消注册实时数据回调"""
+        if callback in self.realtime_data_callbacks:
+            self.realtime_data_callbacks.remove(callback)
+    
+    def unregister_order_callback(self, callback: Callable):
+        """取消注册订单回调"""
+        if callback in self.order_callbacks:
+            self.order_callbacks.remove(callback)
+    
+    def unregister_trade_callback(self, callback: Callable):
+        """取消注册成交回调"""
+        if callback in self.trade_callbacks:
+            self.trade_callbacks.remove(callback)

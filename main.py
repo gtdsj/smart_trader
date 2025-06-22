@@ -134,13 +134,20 @@ app = create_app()
 
 
 if __name__ == "__main__":
+    import os
+    from pathlib import Path
+    
     settings = get_settings()
+    
+    # 确保日志目录存在
+    log_dir = Path(settings.log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
     
     # 配置日志
     logger.add(
-        "logs/app_{time:YYYY-MM-DD}.log",
+        log_dir / f"{settings.log_file_prefix}_{{time:YYYY-MM-DD}}.log",
         rotation="1 day",
-        retention="30 days",
+        retention=f"{settings.max_log_files} days",
         level=settings.log_level,
         format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} | {message}"
     )
