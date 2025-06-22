@@ -6,6 +6,7 @@ XtQuant数据和交易服务模块
 
 import asyncio
 import time
+import threading
 from typing import Dict, List, Optional, Any, Tuple, Callable
 from datetime import datetime, timedelta
 import pandas as pd
@@ -16,7 +17,7 @@ try:
     from xtquant.xttrader import XtQuantTrader, XtQuantTraderCallback
     from xtquant.xttype import StockAccount
     from xtquant import xtconstant
-    import xtdata
+    from xtquant import xtdata
 except ImportError:
     logger.warning("xtquant模块未安装，相关功能将受限")
     XtQuantTrader = None
@@ -122,12 +123,41 @@ else:
 
 
 class XtQuantService:
-    """XtQuant服务类"""
+    """XtQuant服务类，提供数据获取和交易功能"""
+    
+    # 类变量用于管理session_id和单例
+    _session_counter = 123456
+    _session_lock = threading.Lock()
+    _instance = None
+    _instance_lock = threading.Lock()
+    
+    def __new__(cls):
+        """单例模式实现"""
+        if cls._instance is None:
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    @classmethod
+    def _get_next_session_id(cls) -> int:
+        """获取下一个可用的session_id"""
+        with cls._session_lock:
+            cls._session_counter += 1
+            return cls._session_counter
     
     def __init__(self):
+        # 防止重复初始化
+        if hasattr(self, '_initialized'):
+            return
+        self._initialized = True
         self.settings = get_settings()
         self.redis_client = get_redis()
         self.notification_service = NotificationService()
+        
+        # 为每个实例分配唯一的session_id
+        self.session_id = self._get_next_session_id()
+        logger.info(f"XtQuantService实例创建，分配session_id: {self.session_id}")
         
         # 交易相关
         self.xt_trader = None
@@ -146,6 +176,11 @@ class XtQuantService:
         self.trade_callbacks = []
         
         self.is_running = False
+    
+    @property
+    def is_connected(self) -> bool:
+        """检查XtQuant服务连接状态"""
+        return self.is_trading_connected and self.is_data_connected
     
     async def start(self):
         """启动XtQuant服务"""
@@ -227,10 +262,10 @@ class XtQuantService:
             if XtQuantTrader is None:
                 return
             
-            # 创建交易对象
+            # 创建交易对象，使用实例特有的session_id
             self.xt_trader = XtQuantTrader(
                 path=self.settings.xtquant.path,
-                session_id=self.settings.xtquant.session_id
+                session=self.session_id
             )
             
             # 创建账户对象
@@ -257,7 +292,7 @@ class XtQuantService:
                 raise Exception(f"订阅交易回调失败，错误码: {subscribe_result}")
             
             self.is_trading_connected = True
-            logger.info("XtQuant交易连接成功")
+            logger.info("XtQuant交易连接成功, is_trading_connected: " + str(self.is_trading_connected))
             
         except Exception as e:
             logger.error(f"初始化交易连接失败: {e}")
@@ -526,7 +561,7 @@ class XtQuantService:
         """获取账户资产"""
         try:
             if not self.is_trading_connected or self.xt_trader is None:
-                raise Exception("XtQuant交易服务未连接，无法获取账户资产")
+                raise Exception("XtQuant交易服务未连接，无法获取账户资产, is_trading_connected: " + str(self.is_trading_connected) + ", self.xt_trader: " + str(self.xt_trader))
             
             asset = self.xt_trader.query_stock_asset(self.account)
             if asset:

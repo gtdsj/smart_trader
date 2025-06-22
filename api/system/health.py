@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from typing import Dict, Any
 
-from config_simple import get_settings
+from config import get_settings
 from core.local_cache import get_cache
 from core.duckdb_adapter import get_duckdb
 

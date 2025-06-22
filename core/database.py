@@ -13,7 +13,7 @@ from typing import Generator
 # from loguru import logger
 import os
 
-from config_simple import get_settings
+from config import get_settings
 
 # 简单的日志函数
 def log_info(msg):

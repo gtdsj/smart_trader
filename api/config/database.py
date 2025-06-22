@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 
-from config_simple import get_settings
+from config import get_settings
 from core.duckdb_adapter import get_duckdb
 
 # 创建数据库配置路由器

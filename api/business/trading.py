@@ -362,23 +362,77 @@ def get_trades(date: Optional[str] = None, stock_code: Optional[str] = None, lim
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/account", summary="账户资产", description="获取账户资产信息")
-def get_account_asset():
+async def get_account_asset():
     """获取账户资产"""
     try:
-        # 这里可以从XtQuant获取实际账户资产
-        asset = {
-            "account_id": getattr(settings.xtquant, 'account_id', ''),
-            "total_asset": 100000.0,  # 总资产
-            "available_cash": 50000.0,  # 可用资金
-            "frozen_cash": 0.0,  # 冻结资金
-            "market_value": 50000.0,  # 持仓市值
-            "today_pnl": 100.0,  # 今日盈亏
-            "total_pnl": 1000.0,  # 总盈亏
-            "pnl_ratio": 0.01,  # 盈亏比例
-            "position_ratio": 0.5,  # 仓位比例
-            "risk_level": "low",  # low, medium, high
-            "last_update": datetime.now().isoformat()
-        }
+        # 从XtQuant获取真实账户资产
+        try:
+            from services.xtquant_service import XtQuantService
+            xtquant_service = XtQuantService()
+            
+            # 获取账户资产信息
+            account_data = await xtquant_service.get_account_asset()
+            
+            if account_data:
+                # 计算风险等级
+                position_ratio = account_data.get("position_ratio", 0.0)
+                if position_ratio < 0.3:
+                    risk_level = "low"
+                elif position_ratio < 0.7:
+                    risk_level = "medium"
+                else:
+                    risk_level = "high"
+                
+                asset = {
+                    "account_id": getattr(settings.xtquant, 'account_id', ''),
+                    "total_asset": account_data.get("total_asset", 0.0),
+                    "available_cash": account_data.get("cash", 0.0),
+                    "frozen_cash": account_data.get("frozen_cash", 0.0),
+                    "market_value": account_data.get("market_value", 0.0),
+                    "today_pnl": account_data.get("today_pnl", 0.0),
+                    "total_pnl": account_data.get("total_pnl", 0.0),
+                    "pnl_ratio": account_data.get("pnl_ratio", 0.0),
+                    "position_ratio": position_ratio,
+                    "risk_level": risk_level,
+                    "last_update": datetime.now().isoformat(),
+                    "source": "xtquant"
+                }
+            else:
+                # 如果获取失败，返回默认值
+                asset = {
+                    "account_id": getattr(settings.xtquant, 'account_id', ''),
+                    "total_asset": 0.0,
+                    "available_cash": 0.0,
+                    "frozen_cash": 0.0,
+                    "market_value": 0.0,
+                    "today_pnl": 0.0,
+                    "total_pnl": 0.0,
+                    "pnl_ratio": 0.0,
+                    "position_ratio": 0.0,
+                    "risk_level": "unknown",
+                    "last_update": datetime.now().isoformat(),
+                    "source": "xtquant",
+                    "status": "no_data"
+                }
+                
+        except Exception as e:
+            # XtQuant获取失败时的错误处理
+            asset = {
+                "account_id": getattr(settings.xtquant, 'account_id', ''),
+                "total_asset": 0.0,
+                "available_cash": 0.0,
+                "frozen_cash": 0.0,
+                "market_value": 0.0,
+                "today_pnl": 0.0,
+                "total_pnl": 0.0,
+                "pnl_ratio": 0.0,
+                "position_ratio": 0.0,
+                "risk_level": "unknown",
+                "last_update": datetime.now().isoformat(),
+                "source": "xtquant",
+                "status": "error",
+                "error": str(e)
+            }
         
         return ApiResponse(
             message="获取账户资产成功",

@@ -12,7 +12,7 @@ from datetime import datetime
 import uvicorn
 
 # 导入配置和核心模块
-from config_simple import get_settings
+from config import get_settings
 from core.local_cache import get_cache, init_cache
 from core.duckdb_adapter import get_duckdb, init_duckdb
 

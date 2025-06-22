@@ -10,7 +10,7 @@ from typing import Dict, Any
 import psutil
 import os
 
-from config_simple import get_settings
+from config import get_settings
 from core.local_cache import get_cache
 from core.duckdb_adapter import get_duckdb
 

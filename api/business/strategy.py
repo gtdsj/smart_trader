@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from config_simple import get_settings
+from config import get_settings
 
 # 创建策略业务路由器
 router = APIRouter(prefix="/strategy", tags=["策略业务"])

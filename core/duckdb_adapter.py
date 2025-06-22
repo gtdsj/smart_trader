@@ -304,7 +304,7 @@ def get_duckdb() -> DuckDBAdapter:
     """获取全局DuckDB实例"""
     global _db_instance
     if _db_instance is None:
-        from config_simple import get_settings
+        from config import get_settings
         settings = get_settings()
         
         if settings.database.memory:

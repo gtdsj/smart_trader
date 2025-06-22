@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, Dict, List
 
-from config_simple import get_settings
+from config import get_settings
 
 # 创建通知配置路由器
 router = APIRouter(prefix="/notification", tags=["通知配置"])

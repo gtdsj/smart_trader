@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, Dict
 
-from config_simple import get_settings
+from config import get_settings
 
 # 创建XtQuant配置路由器
 router = APIRouter(prefix="/xtquant", tags=["XtQuant配置"])

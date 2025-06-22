@@ -10,7 +10,7 @@ from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 import json
 
-from config_simple import get_settings
+from config import get_settings
 
 # 创建回测业务路由器
 router = APIRouter(prefix="/backtest", tags=["回测业务"])

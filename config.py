@@ -26,6 +26,9 @@ class DatabaseConfig(BaseModel):
     username: str = Field(default="postgres", description="数据库用户名")
     password: str = Field(default="password", description="数据库密码")
     database: str = Field(default="smart_trader", description="数据库名称")
+    # DuckDB配置
+    memory: bool = Field(default=True, description="是否使用内存数据库")
+    path: str = Field(default="data/smart_trader.db", description="数据库文件路径")
     
     @property
     def url(self) -> str:
@@ -155,6 +158,8 @@ class ConfigManager:
             'DB_USERNAME': ['database', 'username'],
             'DB_PASSWORD': ['database', 'password'],
             'DB_DATABASE': ['database', 'database'],
+            'DB_MEMORY': ['database', 'memory'],
+            'DB_PATH': ['database', 'path'],
             
             # Redis配置
             'REDIS_HOST': ['redis', 'host'],
@@ -195,7 +200,7 @@ class ConfigManager:
                 # 类型转换
                 if env_key.endswith('_PORT') or env_key.endswith('_SESSION_ID') or env_key.endswith('_DB'):
                     env_value = int(env_value)
-                elif env_key.endswith('_DEBUG') or env_key.endswith('_ENABLED'):
+                elif env_key.endswith('_DEBUG') or env_key.endswith('_ENABLED') or env_key.endswith('_MEMORY'):
                     env_value = env_value.lower() in ('true', '1', 'yes', 'on')
                 elif env_key.startswith('TRADING_') or env_key.startswith('BACKTEST_'):
                     if env_key.endswith('_RATIO') or env_key.endswith('_RATE') or env_key.endswith('_AMOUNT') or env_key.endswith('_CASH'):

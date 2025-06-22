@@ -7,7 +7,7 @@
 from flask import Flask, jsonify
 import json
 from datetime import datetime
-from config_simple import get_settings
+from config import get_settings
 from core.local_cache import get_cache, init_cache
 from core.duckdb_adapter import get_duckdb, init_duckdb
 
@@ -89,16 +89,61 @@ def get_account_info():
             cached_data["source"] = "cache"
             return jsonify(cached_data)
         
-        # 从数据库或XtQuant获取（这里先返回模拟数据）
-        account_info = {
-            "account_id": "demo_account",
-            "cash": 100000.0,
-            "market_value": 0.0,
-            "total_asset": 100000.0,
-            "status": "disconnected",
-            "source": "database",
-            "timestamp": datetime.now().isoformat()
-        }
+        # 从XtQuant获取真实账户信息
+        try:
+            from services.xtquant_service import XtQuantService
+            from config import get_settings
+            xtquant_service = XtQuantService()
+            
+            # 获取账户资产
+            asset_data = xtquant_service.get_account_asset()
+            
+            if asset_data:
+                account_info = {
+                    "account_id": get_settings().xtquant.account_id,
+                    "cash": asset_data.get("cash", 0.0),
+                    "market_value": asset_data.get("market_value", 0.0),
+                    "total_asset": asset_data.get("total_asset", 0.0),
+                    "available_cash": asset_data.get("available_cash", 0.0),
+                    "frozen_cash": asset_data.get("frozen_cash", 0.0),
+                    "profit_loss": asset_data.get("profit_loss", 0.0),
+                    "profit_loss_ratio": asset_data.get("profit_loss_ratio", 0.0),
+                    "status": "connected" if xtquant_service.is_trading_connected else "disconnected",
+                    "source": "xtquant",
+                    "timestamp": datetime.now().isoformat()
+                }
+            else:
+                # 如果无法获取真实数据，返回基础信息
+                account_info = {
+                    "account_id": get_settings().xtquant.account_id,
+                    "cash": 0.0,
+                    "market_value": 0.0,
+                    "total_asset": 0.0,
+                    "available_cash": 0.0,
+                    "frozen_cash": 0.0,
+                    "profit_loss": 0.0,
+                    "profit_loss_ratio": 0.0,
+                    "status": "disconnected",
+                    "source": "xtquant",
+                    "timestamp": datetime.now().isoformat()
+                }
+        except Exception as e:
+            print(f"获取账户信息失败: {e}")
+            # 返回错误状态的账户信息
+            account_info = {
+                "account_id": get_settings().xtquant.account_id if hasattr(get_settings(), 'xtquant') else "unknown",
+                "cash": 0.0,
+                "market_value": 0.0,
+                "total_asset": 0.0,
+                "available_cash": 0.0,
+                "frozen_cash": 0.0,
+                "profit_loss": 0.0,
+                "profit_loss_ratio": 0.0,
+                "status": "error",
+                "source": "xtquant",
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e)
+            }
         
         # 缓存数据（1分钟过期）
         cache.set_json(cache_key, account_info, expire=60)
@@ -119,17 +164,54 @@ def get_stock_data(stock_code):
         if cached_data:
             return jsonify(cached_data)
         
-        # 从数据库查询（这里先返回模拟数据）
-        stock_data = {
-            "stock_code": stock_code,
-            "name": f"股票{stock_code}",
-            "price": 10.50,
-            "change": 0.25,
-            "change_percent": 2.44,
-            "volume": 1000000,
-            "timestamp": datetime.now().isoformat(),
-            "source": "database"
-        }
+        # 从XtQuant获取真实股票数据
+        try:
+            from services.xtquant_service import XtQuantService
+            xtquant_service = XtQuantService()
+            
+            # 获取实时行情数据
+            realtime_data = await xtquant_service.get_realtime_data([stock_code])
+            
+            if realtime_data and stock_code in realtime_data:
+                data = realtime_data[stock_code]
+                stock_data = {
+                    "stock_code": stock_code,
+                    "name": data.get("name", f"股票{stock_code}"),
+                    "price": data.get("price", 0.0),
+                    "change": data.get("change", 0.0),
+                    "change_percent": data.get("change_percent", 0.0),
+                    "volume": data.get("volume", 0),
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "xtquant"
+                }
+            else:
+                # 如果没有获取到数据
+                stock_data = {
+                    "stock_code": stock_code,
+                    "name": f"股票{stock_code}",
+                    "price": 0.0,
+                    "change": 0.0,
+                    "change_percent": 0.0,
+                    "volume": 0,
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "xtquant",
+                    "status": "no_data"
+                }
+        except Exception as e:
+            print(f"获取股票 {stock_code} 数据失败: {e}")
+            # 返回错误状态的股票数据
+            stock_data = {
+                "stock_code": stock_code,
+                "name": f"股票{stock_code}",
+                "price": 0.0,
+                "change": 0.0,
+                "change_percent": 0.0,
+                "volume": 0,
+                "timestamp": datetime.now().isoformat(),
+                "source": "xtquant",
+                "status": "error",
+                "error": str(e)
+            }
         
         # 缓存数据（5分钟过期）
         cache.set_json(cache_key, stock_data, expire=300)
@@ -209,51 +291,59 @@ def get_positions():
             cached_data["source"] = "cache"
             return jsonify(cached_data)
         
-        # 从数据库或XtQuant获取（这里先返回模拟数据）
-        positions = {
-            "total_positions": 3,
-            "total_market_value": 52500.0,
-            "positions": [
-                {
-                    "stock_code": "600000.SH",
-                    "stock_name": "浦发银行",
-                    "quantity": 1000,
-                    "available_quantity": 1000,
-                    "avg_cost": 10.50,
-                    "current_price": 10.75,
-                    "market_value": 10750.0,
-                    "profit_loss": 250.0,
-                    "profit_loss_ratio": 2.38,
-                    "position_ratio": 20.48
-                },
-                {
-                    "stock_code": "000001.SZ",
-                    "stock_name": "平安银行",
-                    "quantity": 2000,
-                    "available_quantity": 2000,
-                    "avg_cost": 12.30,
-                    "current_price": 12.60,
-                    "market_value": 25200.0,
-                    "profit_loss": 600.0,
-                    "profit_loss_ratio": 2.44,
-                    "position_ratio": 48.00
-                },
-                {
-                    "stock_code": "002415.SZ",
-                    "stock_name": "海康威视",
-                    "quantity": 500,
-                    "available_quantity": 500,
-                    "avg_cost": 32.20,
-                    "current_price": 33.10,
-                    "market_value": 16550.0,
-                    "profit_loss": 450.0,
-                    "profit_loss_ratio": 2.80,
-                    "position_ratio": 31.52
+        # 从XtQuant获取真实持仓数据
+        try:
+            from services.xtquant_service import XtQuantService
+            xtquant_service = XtQuantService()
+            
+            # 获取持仓列表
+            position_list = await xtquant_service.get_positions()
+            
+            if position_list:
+                # 计算汇总数据
+                total_market_value = sum(pos.get("market_value", 0) for pos in position_list)
+                total_cost_value = sum(pos.get("cost_value", 0) for pos in position_list)
+                total_profit_loss = total_market_value - total_cost_value
+                total_profit_loss_ratio = (total_profit_loss / total_cost_value * 100) if total_cost_value > 0 else 0
+                
+                positions = {
+                    "total_positions": len(position_list),
+                    "total_market_value": total_market_value,
+                    "total_cost": total_cost_value,
+                    "total_profit_loss": total_profit_loss,
+                    "total_profit_loss_ratio": total_profit_loss_ratio,
+                    "positions": position_list,
+                    "source": "xtquant",
+                    "timestamp": datetime.now().isoformat()
                 }
-            ],
-            "source": "database",
-            "timestamp": datetime.now().isoformat()
-        }
+            else:
+                # 如果没有持仓数据
+                positions = {
+                    "total_positions": 0,
+                    "total_market_value": 0.0,
+                    "total_cost": 0.0,
+                    "total_profit_loss": 0.0,
+                    "total_profit_loss_ratio": 0.0,
+                    "positions": [],
+                    "source": "xtquant",
+                    "timestamp": datetime.now().isoformat(),
+                    "status": "no_positions"
+                }
+        except Exception as e:
+            print(f"获取持仓信息失败: {e}")
+            # 返回错误状态的持仓信息
+            positions = {
+                "total_positions": 0,
+                "total_market_value": 0.0,
+                "total_cost": 0.0,
+                "total_profit_loss": 0.0,
+                "total_profit_loss_ratio": 0.0,
+                "positions": [],
+                "source": "xtquant",
+                "timestamp": datetime.now().isoformat(),
+                "status": "error",
+                "error": str(e)
+            }
         
         # 缓存数据（30秒过期）
         cache.set_json(cache_key, positions, expire=30)
@@ -275,62 +365,50 @@ def get_position(stock_code):
             cached_data["source"] = "cache"
             return jsonify(cached_data)
         
-        # 模拟数据 - 根据股票代码返回对应持仓
-        positions_data = {
-            "600000.SH": {
-                "stock_code": "600000.SH",
-                "stock_name": "浦发银行",
-                "quantity": 1000,
-                "available_quantity": 1000,
-                "avg_cost": 10.50,
-                "current_price": 10.75,
-                "market_value": 10750.0,
-                "profit_loss": 250.0,
-                "profit_loss_ratio": 2.38,
-                "position_ratio": 20.48
-            },
-            "000001.SZ": {
-                "stock_code": "000001.SZ",
-                "stock_name": "平安银行",
-                "quantity": 2000,
-                "available_quantity": 2000,
-                "avg_cost": 12.30,
-                "current_price": 12.60,
-                "market_value": 25200.0,
-                "profit_loss": 600.0,
-                "profit_loss_ratio": 2.44,
-                "position_ratio": 48.00
-            },
-            "002415.SZ": {
-                "stock_code": "002415.SZ",
-                "stock_name": "海康威视",
-                "quantity": 500,
-                "available_quantity": 500,
-                "avg_cost": 32.20,
-                "current_price": 33.10,
-                "market_value": 16550.0,
-                "profit_loss": 450.0,
-                "profit_loss_ratio": 2.80,
-                "position_ratio": 31.52
-            }
-        }
-        
-        position = positions_data.get(stock_code)
-        if position:
-            position["source"] = "database"
-            position["timestamp"] = datetime.now().isoformat()
+        # 从XtQuant获取真实持仓数据
+        try:
+            from services.xtquant_service import XtQuantService
+            xtquant_service = XtQuantService()
             
-            # 缓存数据（30秒过期）
-            cache.set_json(cache_key, position, expire=30)
+            # 获取所有持仓
+            position_list = await xtquant_service.get_positions()
             
-            return jsonify(position)
-        else:
+            # 查找指定股票的持仓
+            position = None
+            if position_list:
+                for pos in position_list:
+                    if pos.get("stock_code") == stock_code:
+                        position = pos
+                        break
+            
+            if position:
+                position["source"] = "xtquant"
+                position["timestamp"] = datetime.now().isoformat()
+                
+                # 缓存数据（30秒过期）
+                cache.set_json(cache_key, position, expire=30)
+            
+                return jsonify(position)
+            else:
+                return jsonify({
+                    "message": f"未找到股票 {stock_code} 的持仓",
+                    "stock_code": stock_code,
+                    "quantity": 0,
+                    "source": "xtquant",
+                    "timestamp": datetime.now().isoformat(),
+                    "status": "no_position"
+                }), 404
+        except Exception as e:
+            print(f"获取股票 {stock_code} 持仓信息失败: {e}")
             return jsonify({
-                "message": f"未找到股票 {stock_code} 的持仓",
+                "message": f"获取股票 {stock_code} 持仓信息失败: {str(e)}",
                 "stock_code": stock_code,
                 "quantity": 0,
-                "timestamp": datetime.now().isoformat()
-            }), 404
+                "source": "xtquant",
+                "timestamp": datetime.now().isoformat(),
+                "status": "error",
+                "error": str(e)
+            }), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

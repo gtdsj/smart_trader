@@ -6,7 +6,7 @@
 """
 
 import os
-from config_simple import (
+from config import (
     get_settings, 
     reload_settings, 
     save_settings, 

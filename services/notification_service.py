@@ -154,12 +154,17 @@ class NotificationService:
                 secret=self.settings.dingtalk.secret
             )
     
-    async def _save_notification_log(self, notification_type: str, title: str, 
+    async def _save_notification_log(self, notification_type: str, title: str,
                                    content: str, recipient: str, status: str, 
                                    error_message: Optional[str] = None):
         """保存通知日志"""
         try:
-            async for db in get_db():
+            # 确保数据库已初始化
+            from core.database import init_database, SessionLocal
+            if SessionLocal is None:
+                init_database()
+            
+            for db in get_db():
                 log_data = {
                     "notification_type": notification_type,
                     "title": title,
@@ -171,8 +176,8 @@ class NotificationService:
                 }
                 
                 stmt = insert(NotificationLog).values(**log_data)
-                await db.execute(stmt)
-                await db.commit()
+                db.execute(stmt)
+                db.commit()
                 break
         except Exception as e:
             logger.error(f"保存通知日志失败: {e}")

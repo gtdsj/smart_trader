@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field, validator
 
-from config_simple import get_settings
+from config import get_settings
 
 # 创建配置路由器
 config_router = APIRouter(prefix="/api/config")
@@ -120,7 +120,7 @@ def update_database_config(request: DatabaseConfigRequest):
     """更新数据库配置"""
     try:
         # 这里应该实现配置更新逻辑
-        # 由于使用的是简化配置，暂时返回模拟数据
+        # 注意：当前为简化实现，实际生产环境中应连接真实配置系统
         
         updated_config = {
             "type": settings.database.db_type,

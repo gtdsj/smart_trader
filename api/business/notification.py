@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from enum import Enum
 
-from config_simple import get_settings
+from config import get_settings
 
 # 创建通知业务路由器
 router = APIRouter(prefix="/notification", tags=["通知业务"])
