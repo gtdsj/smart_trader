@@ -1,0 +1,39 @@
+{
+  "app_name": "My Trading Bot",
+  "version": "2.0.0",
+  "debug": false,
+  "log_level": "INFO",
+  "api_host": "0.0.0.0",
+  "api_port": 8888,
+  "database": {
+    "type": "duckdb",
+    "path": "data/smart_trader.db",
+    "memory": false
+  },
+  "xtquant": {
+    "path": "D:\\迅投极速交易终端 睿智融科版\\userdata_mini",
+    "session_id": 123456,
+    "account_id": "85110106",
+    "account_type": "STOCK"
+  },
+  "dingtalk": {
+    "webhook_url": "",
+    "secret": null,
+    "enabled": false
+  },
+  "trading": {
+    "max_position_ratio": 0.9,
+    "max_single_stock_ratio": 0.1,
+    "stop_loss_ratio": 0.03,
+    "take_profit_ratio": 0.2,
+    "min_trade_amount": 1000.0,
+    "commission_rate": 0.0003,
+    "slippage_rate": 0.001
+  },
+  "backtest": {
+    "initial_cash": 1000000.0,
+    "start_date": "2020-01-01",
+    "end_date": "2023-12-31",
+    "benchmark": "000300.SH"
+  }
+}
