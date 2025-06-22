@@ -196,6 +196,144 @@ def get_database_info():
     except Exception as e:
         return jsonify({"error": str(e), "status": "error"}), 500
 
+@app.route('/api/positions')
+def get_positions():
+    """获取当前持仓"""
+    try:
+        # 先从缓存获取
+        cache = get_cache()
+        cache_key = "positions"
+        cached_data = cache.get_json(cache_key)
+        
+        if cached_data:
+            cached_data["source"] = "cache"
+            return jsonify(cached_data)
+        
+        # 从数据库或XtQuant获取（这里先返回模拟数据）
+        positions = {
+            "total_positions": 3,
+            "total_market_value": 52500.0,
+            "positions": [
+                {
+                    "stock_code": "600000.SH",
+                    "stock_name": "浦发银行",
+                    "quantity": 1000,
+                    "available_quantity": 1000,
+                    "avg_cost": 10.50,
+                    "current_price": 10.75,
+                    "market_value": 10750.0,
+                    "profit_loss": 250.0,
+                    "profit_loss_ratio": 2.38,
+                    "position_ratio": 20.48
+                },
+                {
+                    "stock_code": "000001.SZ",
+                    "stock_name": "平安银行",
+                    "quantity": 2000,
+                    "available_quantity": 2000,
+                    "avg_cost": 12.30,
+                    "current_price": 12.60,
+                    "market_value": 25200.0,
+                    "profit_loss": 600.0,
+                    "profit_loss_ratio": 2.44,
+                    "position_ratio": 48.00
+                },
+                {
+                    "stock_code": "002415.SZ",
+                    "stock_name": "海康威视",
+                    "quantity": 500,
+                    "available_quantity": 500,
+                    "avg_cost": 32.20,
+                    "current_price": 33.10,
+                    "market_value": 16550.0,
+                    "profit_loss": 450.0,
+                    "profit_loss_ratio": 2.80,
+                    "position_ratio": 31.52
+                }
+            ],
+            "source": "database",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # 缓存数据（30秒过期）
+        cache.set_json(cache_key, positions, expire=30)
+        
+        return jsonify(positions)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/positions/<stock_code>')
+def get_position(stock_code):
+    """获取指定股票的持仓"""
+    try:
+        # 先从缓存获取
+        cache = get_cache()
+        cache_key = f"position:{stock_code}"
+        cached_data = cache.get_json(cache_key)
+        
+        if cached_data:
+            cached_data["source"] = "cache"
+            return jsonify(cached_data)
+        
+        # 模拟数据 - 根据股票代码返回对应持仓
+        positions_data = {
+            "600000.SH": {
+                "stock_code": "600000.SH",
+                "stock_name": "浦发银行",
+                "quantity": 1000,
+                "available_quantity": 1000,
+                "avg_cost": 10.50,
+                "current_price": 10.75,
+                "market_value": 10750.0,
+                "profit_loss": 250.0,
+                "profit_loss_ratio": 2.38,
+                "position_ratio": 20.48
+            },
+            "000001.SZ": {
+                "stock_code": "000001.SZ",
+                "stock_name": "平安银行",
+                "quantity": 2000,
+                "available_quantity": 2000,
+                "avg_cost": 12.30,
+                "current_price": 12.60,
+                "market_value": 25200.0,
+                "profit_loss": 600.0,
+                "profit_loss_ratio": 2.44,
+                "position_ratio": 48.00
+            },
+            "002415.SZ": {
+                "stock_code": "002415.SZ",
+                "stock_name": "海康威视",
+                "quantity": 500,
+                "available_quantity": 500,
+                "avg_cost": 32.20,
+                "current_price": 33.10,
+                "market_value": 16550.0,
+                "profit_loss": 450.0,
+                "profit_loss_ratio": 2.80,
+                "position_ratio": 31.52
+            }
+        }
+        
+        position = positions_data.get(stock_code)
+        if position:
+            position["source"] = "database"
+            position["timestamp"] = datetime.now().isoformat()
+            
+            # 缓存数据（30秒过期）
+            cache.set_json(cache_key, position, expire=30)
+            
+            return jsonify(position)
+        else:
+            return jsonify({
+                "message": f"未找到股票 {stock_code} 的持仓",
+                "stock_code": stock_code,
+                "quantity": 0,
+                "timestamp": datetime.now().isoformat()
+            }), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     print(f"Smart Trader Flask服务启动中...")
     print(f"应用名称: {settings.app_name}")
@@ -222,5 +360,7 @@ if __name__ == '__main__':
     print(f"  - 数据库信息: http://localhost:{settings.api_port}/api/database/info")
     print(f"  - 股票数据: http://localhost:{settings.api_port}/api/stock/<股票代码>")
     print(f"  - 账户信息: http://localhost:{settings.api_port}/api/account")
+    print(f"  - 所有持仓: http://localhost:{settings.api_port}/api/positions")
+    print(f"  - 单个持仓: http://localhost:{settings.api_port}/api/positions/<股票代码>")
     
     app.run(host='0.0.0.0', port=settings.api_port, debug=settings.debug)
