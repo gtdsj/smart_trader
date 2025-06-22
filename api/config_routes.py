@@ -11,7 +11,7 @@ from loguru import logger
 from config import Settings, get_settings
 
 # 创建路由器
-router = APIRouter(prefix="/api/config", tags=["配置服务"])
+router = APIRouter(prefix="/api/v1/config", tags=["配置服务"])
 
 
 # 请求模型
