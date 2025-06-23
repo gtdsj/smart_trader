@@ -49,6 +49,21 @@ class RealtimeDataRequest(BaseModel):
     stock_codes: List[str] = Field(..., description="股票代码列表")
 
 
+class DailyDataRequest(BaseModel):
+    """日线数据请求"""
+    stock_code: str = Field(..., description="股票代码")
+    start_date: Optional[str] = Field(None, description="开始日期，格式YYYY-MM-DD，默认为增量更新")
+    end_date: Optional[str] = Field(None, description="结束日期，格式YYYY-MM-DD，默认为今天")
+    save_to_db: bool = Field(True, description="是否保存到数据库")
+
+
+class BatchDailyDataRequest(BaseModel):
+    """批量日线数据请求"""
+    stock_codes: List[str] = Field(..., description="股票代码列表")
+    start_date: Optional[str] = Field(None, description="开始日期，格式YYYY-MM-DD，默认为增量更新")
+    end_date: Optional[str] = Field(None, description="结束日期，格式YYYY-MM-DD，默认为今天")
+
+
 class WatchlistRequest(BaseModel):
     """监控列表请求"""
     stock_codes: List[str] = Field(..., description="股票代码列表")
@@ -257,6 +272,189 @@ async def get_historical_data(
         )
     except Exception as e:
         logger.error(f"获取历史数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/daily", response_model=ApiResponse, summary="获取股票日线数据")
+async def get_stock_daily_data(
+    request: DailyDataRequest,
+    service: DataService = Depends(get_data_service)
+):
+    """获取指定股票的日线数据并保存到DuckDB
+    
+    支持增量更新：
+    - 如果不指定start_date，会自动从数据库最新日期开始增量更新
+    - 如果数据库中没有该股票数据，会获取最近3年的历史数据
+    - 支持指定日期范围获取特定时间段的数据
+    """
+    try:
+        # 验证日期格式
+        if request.start_date:
+            try:
+                datetime.strptime(request.start_date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="开始日期格式错误，应为YYYY-MM-DD")
+        
+        if request.end_date:
+            try:
+                datetime.strptime(request.end_date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="结束日期格式错误，应为YYYY-MM-DD")
+        
+        if request.start_date and request.end_date:
+            start_date = datetime.strptime(request.start_date, "%Y-%m-%d")
+            end_date = datetime.strptime(request.end_date, "%Y-%m-%d")
+            if start_date > end_date:
+                raise HTTPException(status_code=400, detail="开始日期不能大于结束日期")
+        
+        # 获取日线数据
+        df = await service.get_stock_daily_data(
+            stock_code=request.stock_code,
+            start_date=request.start_date,
+            end_date=request.end_date,
+            save_to_db=request.save_to_db
+        )
+        
+        if df.empty:
+            return ApiResponse(
+                success=True,
+                message=f"未获取到{request.stock_code}的日线数据",
+                data=[]
+            )
+        
+        # 转换为字典列表
+        data = df.to_dict('records')
+        
+        # 格式化日期和数值
+        for record in data:
+            if 'trade_date' in record:
+                if hasattr(record['trade_date'], 'strftime'):
+                    record['trade_date'] = record['trade_date'].strftime('%Y-%m-%d')
+                else:
+                    record['trade_date'] = str(record['trade_date'])
+            
+            # 格式化数值字段
+            for field in ['open_price', 'high_price', 'low_price', 'close_price', 'amount', 'turnover_rate', 'pe_ratio', 'pb_ratio']:
+                if field in record and record[field] is not None:
+                    record[field] = round(float(record[field]), 3)
+        
+        return ApiResponse(
+            success=True,
+            message=f"成功获取{request.stock_code}的{len(data)}条日线数据",
+            data={
+                "stock_code": request.stock_code,
+                "total_records": len(data),
+                "data": data
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"获取{request.stock_code}日线数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/daily/batch", response_model=ApiResponse, summary="批量获取股票日线数据")
+async def batch_get_daily_data(
+    request: BatchDailyDataRequest,
+    service: DataService = Depends(get_data_service)
+):
+    """批量获取多只股票的日线数据
+    
+    支持批量增量更新，适用于定时任务或大量股票数据更新
+    """
+    try:
+        # 验证股票代码数量
+        if len(request.stock_codes) > 100:
+            raise HTTPException(status_code=400, detail="单次批量请求股票数量不能超过100只")
+        
+        # 验证日期格式
+        if request.start_date:
+            try:
+                datetime.strptime(request.start_date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="开始日期格式错误，应为YYYY-MM-DD")
+        
+        if request.end_date:
+            try:
+                datetime.strptime(request.end_date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="结束日期格式错误，应为YYYY-MM-DD")
+        
+        # 批量更新数据
+        results = await service.batch_update_daily_data(request.stock_codes)
+        
+        return ApiResponse(
+            success=True,
+            message=f"批量更新完成：成功{results['success_count']}只，失败{results['failed_count']}只",
+            data=results
+        )
+        
+    except Exception as e:
+        logger.error(f"批量获取日线数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/daily/query", response_model=ApiResponse, summary="查询数据库中的日线数据")
+async def query_daily_data_from_db(
+    stock_code: str = Query(..., description="股票代码"),
+    start_date: str = Query(..., description="开始日期，格式YYYY-MM-DD"),
+    end_date: str = Query(..., description="结束日期，格式YYYY-MM-DD"),
+    service: DataService = Depends(get_data_service)
+):
+    """从数据库查询已存储的日线数据
+    
+    直接从DuckDB数据库查询数据，不会触发新的数据获取
+    """
+    try:
+        # 验证日期格式
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="日期格式错误，应为YYYY-MM-DD")
+        
+        if start_dt > end_dt:
+            raise HTTPException(status_code=400, detail="开始日期不能大于结束日期")
+        
+        if (end_dt - start_dt).days > 1095:  # 3年
+            raise HTTPException(status_code=400, detail="查询日期范围不能超过3年")
+        
+        # 从数据库查询数据
+        df = service._get_data_from_db(stock_code, start_date, end_date)
+        
+        if df.empty:
+            return ApiResponse(
+                success=True,
+                message=f"数据库中未找到{stock_code}在{start_date}至{end_date}期间的数据",
+                data=[]
+            )
+        
+        # 转换为字典列表
+        data = df.to_dict('records')
+        
+        # 格式化数据
+        for record in data:
+            if 'trade_date' in record:
+                record['trade_date'] = str(record['trade_date'])
+            
+            # 格式化数值字段
+            for field in ['open_price', 'high_price', 'low_price', 'close_price', 'amount', 'turnover_rate', 'pe_ratio', 'pb_ratio']:
+                if field in record and record[field] is not None:
+                    record[field] = round(float(record[field]), 3)
+        
+        return ApiResponse(
+            success=True,
+            message=f"从数据库查询到{stock_code}的{len(data)}条日线数据",
+            data={
+                "stock_code": stock_code,
+                "date_range": f"{start_date} 至 {end_date}",
+                "total_records": len(data),
+                "data": data
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"查询{stock_code}数据库数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

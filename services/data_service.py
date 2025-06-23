@@ -15,8 +15,9 @@ from sqlalchemy import select, insert, update, and_, desc
 from config import get_settings
 from core.database import get_db
 from core.redis_client import get_redis
+from core.duckdb_adapter import DuckDBAdapter
 from services.notification_service import NotificationService
-from services.xtquant_service import XtQuantService
+from services.xtquant_service import XtQuantService, Period
 
 
 class DataService:
@@ -29,6 +30,11 @@ class DataService:
         self.xtquant_service = XtQuantService()
         self.is_running = False
         self.data_update_task = None
+        
+        # 初始化DuckDB适配器
+        db_path = self.settings.database.path if hasattr(self.settings.database, 'path') else 'data/smart_trader.db'
+        self.duckdb = DuckDBAdapter(db_path)
+        self._init_daily_data_table()
         
         # 数据缓存配置
         self.cache_expire_time = 300  # 5分钟缓存过期
@@ -209,6 +215,291 @@ class DataService:
         except Exception as e:
             logger.error(f"获取{stock_code}历史数据失败: {e}")
             return pd.DataFrame()
+    
+    def _init_daily_data_table(self):
+        """初始化日线数据表"""
+        try:
+            create_table_sql = """
+            CREATE TABLE IF NOT EXISTS daily_stock_data (
+                stock_code VARCHAR(20) NOT NULL,
+                trade_date DATE NOT NULL,
+                open_price DECIMAL(10,3),
+                high_price DECIMAL(10,3),
+                low_price DECIMAL(10,3),
+                close_price DECIMAL(10,3),
+                volume BIGINT,
+                amount DECIMAL(20,2),
+                turnover_rate DECIMAL(8,4),
+                pe_ratio DECIMAL(8,2),
+                pb_ratio DECIMAL(8,2),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (stock_code, trade_date)
+            )
+            """
+            self.duckdb.execute(create_table_sql)
+            
+            # 创建索引
+            index_sqls = [
+                "CREATE INDEX IF NOT EXISTS idx_daily_stock_code ON daily_stock_data(stock_code)",
+                "CREATE INDEX IF NOT EXISTS idx_daily_trade_date ON daily_stock_data(trade_date)",
+                "CREATE INDEX IF NOT EXISTS idx_daily_code_date ON daily_stock_data(stock_code, trade_date)"
+            ]
+            
+            for sql in index_sqls:
+                self.duckdb.execute(sql)
+                
+            logger.info("日线数据表初始化完成")
+            
+        except Exception as e:
+            logger.error(f"初始化日线数据表失败: {e}")
+            raise
+    
+    async def get_stock_daily_data(self, stock_code: str, start_date: str = None, 
+                                 end_date: str = None, save_to_db: bool = True) -> pd.DataFrame:
+        """获取指定股票的全部日线数据
+        
+        Args:
+            stock_code: 股票代码
+            start_date: 开始日期，格式YYYY-MM-DD，默认为None（获取全部数据）
+            end_date: 结束日期，格式YYYY-MM-DD，默认为今天
+            save_to_db: 是否保存到数据库，默认True
+            
+        Returns:
+            pandas.DataFrame: 日线数据
+        """
+        try:
+            logger.info(f"开始获取{stock_code}的日线数据")
+            
+            # 如果没有指定结束日期，使用今天
+            if end_date is None:
+                end_date = datetime.now().strftime('%Y-%m-%d')
+            
+            # 如果没有指定开始日期，尝试从数据库获取最新日期
+            if start_date is None:
+                latest_date = self._get_latest_date_from_db(stock_code)
+                if latest_date:
+                    # 从最新日期的下一天开始获取（增量更新）
+                    start_date = (latest_date + timedelta(days=1)).strftime('%Y-%m-%d')
+                    logger.info(f"{stock_code}数据库中最新日期: {latest_date}, 从{start_date}开始增量更新")
+                else:
+                    # 如果数据库中没有数据，获取最近3年的数据
+                    start_date = (datetime.now() - timedelta(days=1095)).strftime('%Y-%m-%d')
+                    logger.info(f"{stock_code}数据库中无数据，从{start_date}开始获取历史数据")
+            
+            # 检查日期范围
+            if start_date >= end_date:
+                logger.info(f"{stock_code}无需更新，数据已是最新")
+                return self._get_data_from_db(stock_code, start_date, end_date)
+            
+            # 从XtQuant获取数据
+            history_data = await self.xtquant_service.get_history_data(
+                stock_codes=[stock_code],
+                period=Period.DAILY,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            if stock_code not in history_data or history_data[stock_code].empty:
+                logger.warning(f"未获取到{stock_code}的数据")
+                return pd.DataFrame()
+            
+            df = history_data[stock_code].copy()
+            
+            # 数据预处理
+            df = self._preprocess_daily_data(df, stock_code)
+            
+            # 保存到数据库
+            if save_to_db and not df.empty:
+                saved_count = await self._save_daily_data_to_db(df, stock_code)
+                logger.info(f"成功保存{stock_code}的{saved_count}条日线数据")
+            
+            return df
+            
+        except Exception as e:
+            logger.error(f"获取{stock_code}日线数据失败: {e}")
+            return pd.DataFrame()
+    
+    def _get_latest_date_from_db(self, stock_code: str) -> Optional[datetime]:
+        """从数据库获取指定股票的最新日期"""
+        try:
+            sql = """
+            SELECT MAX(trade_date) as latest_date 
+            FROM daily_stock_data 
+            WHERE stock_code = ?
+            """
+            result = self.duckdb.fetchone(sql, (stock_code,))
+            
+            if result and result[0]:
+                return datetime.strptime(str(result[0]), '%Y-%m-%d')
+            return None
+            
+        except Exception as e:
+            logger.error(f"获取{stock_code}最新日期失败: {e}")
+            return None
+    
+    def _get_data_from_db(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """从数据库获取数据"""
+        try:
+            sql = """
+            SELECT stock_code, trade_date, open_price, high_price, low_price, 
+                   close_price, volume, amount, turnover_rate, pe_ratio, pb_ratio
+            FROM daily_stock_data 
+            WHERE stock_code = ? AND trade_date BETWEEN ? AND ?
+            ORDER BY trade_date
+            """
+            return self.duckdb.fetchdf(sql, (stock_code, start_date, end_date))
+            
+        except Exception as e:
+            logger.error(f"从数据库获取{stock_code}数据失败: {e}")
+            return pd.DataFrame()
+    
+    def _preprocess_daily_data(self, df: pd.DataFrame, stock_code: str) -> pd.DataFrame:
+        """预处理日线数据"""
+        try:
+            # 重置索引，将时间列转为普通列
+            df = df.reset_index()
+            
+            # 添加股票代码
+            df['stock_code'] = stock_code
+            
+            # 重命名列
+            column_mapping = {
+                'time': 'trade_date',
+                'open': 'open_price',
+                'high': 'high_price', 
+                'low': 'low_price',
+                'close': 'close_price'
+            }
+            df = df.rename(columns=column_mapping)
+            
+            # 确保日期格式正确
+            df['trade_date'] = pd.to_datetime(df['trade_date']).dt.date
+            
+            # 添加默认值
+            if 'turnover_rate' not in df.columns:
+                df['turnover_rate'] = None
+            if 'pe_ratio' not in df.columns:
+                df['pe_ratio'] = None
+            if 'pb_ratio' not in df.columns:
+                df['pb_ratio'] = None
+            
+            # 选择需要的列
+            columns = ['stock_code', 'trade_date', 'open_price', 'high_price', 
+                      'low_price', 'close_price', 'volume', 'amount', 
+                      'turnover_rate', 'pe_ratio', 'pb_ratio']
+            
+            df = df[columns]
+            
+            # 去除重复数据
+            df = df.drop_duplicates(subset=['stock_code', 'trade_date'])
+            
+            return df
+            
+        except Exception as e:
+            logger.error(f"预处理{stock_code}数据失败: {e}")
+            return pd.DataFrame()
+    
+    async def _save_daily_data_to_db(self, df: pd.DataFrame, stock_code: str) -> int:
+        """保存日线数据到数据库"""
+        try:
+            if df.empty:
+                return 0
+            
+            # 先删除已存在的记录，再插入新记录（DuckDB兼容方式）
+            delete_sql = """
+            DELETE FROM daily_stock_data 
+            WHERE stock_code = ? AND trade_date = ?
+            """
+            
+            insert_sql = """
+            INSERT INTO daily_stock_data 
+            (stock_code, trade_date, open_price, high_price, low_price, 
+             close_price, volume, amount, turnover_rate, pe_ratio, pb_ratio, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """
+            
+            saved_count = 0
+            for _, row in df.iterrows():
+                try:
+                    # 先删除已存在的记录
+                    self.duckdb.execute(delete_sql, (
+                        row['stock_code'],
+                        row['trade_date']
+                    ))
+                    
+                    # 插入新记录
+                    self.duckdb.execute(insert_sql, (
+                        row['stock_code'],
+                        row['trade_date'],
+                        float(row['open_price']) if pd.notna(row['open_price']) else None,
+                        float(row['high_price']) if pd.notna(row['high_price']) else None,
+                        float(row['low_price']) if pd.notna(row['low_price']) else None,
+                        float(row['close_price']) if pd.notna(row['close_price']) else None,
+                        int(row['volume']) if pd.notna(row['volume']) else None,
+                        float(row['amount']) if pd.notna(row['amount']) else None,
+                        float(row['turnover_rate']) if pd.notna(row['turnover_rate']) else None,
+                        float(row['pe_ratio']) if pd.notna(row['pe_ratio']) else None,
+                        float(row['pb_ratio']) if pd.notna(row['pb_ratio']) else None
+                    ))
+                    saved_count += 1
+                except Exception as e:
+                    logger.error(f"保存{stock_code}单条数据失败: {e}")
+                    continue
+            
+            return saved_count
+            
+        except Exception as e:
+            logger.error(f"保存{stock_code}日线数据到数据库失败: {e}")
+            return 0
+    
+    async def batch_update_daily_data(self, stock_codes: List[str]) -> Dict[str, Any]:
+        """批量更新多只股票的日线数据"""
+        try:
+            logger.info(f"开始批量更新{len(stock_codes)}只股票的日线数据")
+            
+            results = {
+                'success_count': 0,
+                'failed_count': 0,
+                'total_records': 0,
+                'failed_stocks': [],
+                'success_stocks': []
+            }
+            
+            for stock_code in stock_codes:
+                try:
+                    df = await self.get_stock_daily_data(stock_code)
+                    if not df.empty:
+                        results['success_count'] += 1
+                        results['total_records'] += len(df)
+                        results['success_stocks'].append(stock_code)
+                        logger.info(f"成功更新{stock_code}，共{len(df)}条记录")
+                    else:
+                        results['failed_count'] += 1
+                        results['failed_stocks'].append(stock_code)
+                        logger.warning(f"更新{stock_code}失败，未获取到数据")
+                        
+                except Exception as e:
+                    results['failed_count'] += 1
+                    results['failed_stocks'].append(stock_code)
+                    logger.error(f"更新{stock_code}失败: {e}")
+                    
+                # 添加延迟，避免请求过于频繁
+                await asyncio.sleep(0.1)
+            
+            logger.info(f"批量更新完成：成功{results['success_count']}只，失败{results['failed_count']}只，总计{results['total_records']}条记录")
+            return results
+            
+        except Exception as e:
+            logger.error(f"批量更新日线数据失败: {e}")
+            return {
+                'success_count': 0,
+                'failed_count': len(stock_codes),
+                'total_records': 0,
+                'failed_stocks': stock_codes,
+                'success_stocks': [],
+                'error': str(e)
+            }
     
     async def save_stock_data(self, stock_data: Dict[str, Any]):
         """保存股票数据到数据库"""

@@ -360,28 +360,111 @@ class XtQuantService:
             
             for stock_code in stock_codes:
                 try:
+                    # 先下载补充历史数据
+                    logger.info("download_history_data....1, stock_code: " + stock_code)
+                    try:
+                        if start_date and end_date:
+                            # 使用指定时间范围下载数据
+                            xtdata.download_history_data(
+                                stock_code=stock_code,
+                                period=xt_period,
+                                start_time=start_date,
+                                end_time=end_date
+                            )
+                        else:
+                            # 增量下载最新数据
+                            xtdata.download_history_data(
+                                stock_code=stock_code,
+                                period=xt_period,
+                                incrementally=True
+                            )
+                        logger.info("download_history_data....2, stock_code: " + stock_code + " 下载完成")
+                    except Exception as download_e:
+                        logger.warning(f"下载{stock_code}历史数据失败: {download_e}，继续使用现有数据")
+                    
                     # 获取历史数据
+                    logger.info("get_history_data....1, stock_code: " + stock_code)
                     if start_date and end_date:
+                        logger.info("get_history_data....2, stock_code: " + stock_code + ", start_date: " + start_date + ", end_date: " + end_date + ", xt_period: " + xt_period)
                         data = xtdata.get_market_data(
                             stock_list=[stock_code],
                             period=xt_period,
                             start_time=start_date,
                             end_time=end_date
                         )
+                        logger.info("get_history_data....3, stock_code: " + stock_code + ", start_date: " + start_date + ", end_date: " + end_date + ", xt_period: " + xt_period)
                     else:
+                        logger.info("get_history_data....4, stock_code: " + stock_code + ", count: " + str(count))
                         data = xtdata.get_market_data(
                             stock_list=[stock_code],
                             period=xt_period,
                             count=count
                         )
-                    
-                    if data and stock_code in data:
-                        df = data[stock_code]
-                        # 标准化列名
-                        df.columns = ['time', 'open', 'high', 'low', 'close', 'volume', 'amount']
-                        df['time'] = pd.to_datetime(df['time'])
-                        df.set_index('time', inplace=True)
-                        result[stock_code] = df
+                    logger.info("get_history_data....5, stock_code: " + stock_code )
+                    if data and isinstance(data, dict):
+                        logger.info("get_history_data...6, stock_code: " + stock_code + ", data keys: " + str(list(data.keys())))
+                        
+                        # 根据API文档，返回格式为 { field1: DataFrame, field2: DataFrame, ... }
+                        # DataFrame的index为stock_list，columns为time_list
+                        try:
+                            # 构建完整的DataFrame
+                            stock_df_data = {}
+                            
+                            # 获取所有字段的数据
+                            for field_name, field_df in data.items():
+                                if field_df is not None and not field_df.empty and stock_code in field_df.index:
+                                    # 获取该股票在该字段的时间序列数据
+                                    stock_series = field_df.loc[stock_code]
+                                    if not stock_series.empty:
+                                        stock_df_data[field_name] = stock_series
+                            
+                            if stock_df_data:
+                                # 将所有字段合并为一个DataFrame
+                                df = pd.DataFrame(stock_df_data)
+                                
+                                # 重置索引，将时间作为列
+                                df = df.reset_index()
+                                df.rename(columns={'index': 'time'}, inplace=True)
+                                
+                                # 标准化列名映射
+                                column_mapping = {
+                                    'time': 'time',
+                                    'open': 'open',
+                                    'high': 'high', 
+                                    'low': 'low',
+                                    'close': 'close',
+                                    'volume': 'volume',
+                                    'amount': 'amount'
+                                }
+                                
+                                # 重命名存在的列
+                                existing_columns = {col: column_mapping.get(col, col) for col in df.columns if col in column_mapping}
+                                df.rename(columns=existing_columns, inplace=True)
+                                
+                                # 确保时间列格式正确
+                                if 'time' in df.columns:
+                                    df['time'] = pd.to_datetime(df['time'])
+                                    df.set_index('time', inplace=True)
+                                
+                                result[stock_code] = df
+                                logger.info(f"股票{stock_code}数据处理完成，shape: {df.shape}")
+                            else:
+                                logger.warning(f"股票{stock_code}在返回数据中未找到有效字段")
+                                
+                        except Exception as parse_e:
+                            logger.error(f"解析股票{stock_code}数据失败: {parse_e}")
+                            # 尝试备用解析方式（兼容旧格式）
+                            if stock_code in data:
+                                df = data[stock_code]
+                                if df is not None and not df.empty:
+                                    if len(df.columns) >= 7:
+                                        df.columns = ['time', 'open', 'high', 'low', 'close', 'volume', 'amount']
+                                        df['time'] = pd.to_datetime(df['time'])
+                                        df.set_index('time', inplace=True)
+                                        result[stock_code] = df
+                                        logger.info(f"股票{stock_code}使用备用方式解析成功")
+                    else:
+                        logger.warning(f"股票{stock_code}未获取到有效数据，data类型: {type(data)}，data内容: {data}")
                     
                 except Exception as e:
                     logger.error(f"获取{stock_code}历史数据失败: {e}")

@@ -23,6 +23,9 @@ from api.business.trading import router as trading_router
 from api.business.strategy import router as strategy_router
 from api.business.notification import router as notification_router
 
+# 导入独立的数据路由
+from api.data_routes import router as data_routes_router
+
 # 全局XtQuant服务实例
 xtquant_service_instance = None
 
@@ -51,6 +54,15 @@ app.include_router(data_router, prefix="/api")
 app.include_router(trading_router, prefix="/api")
 app.include_router(strategy_router, prefix="/api")
 app.include_router(notification_router, prefix="/api")
+
+# 注册独立的数据路由（已包含/api/v1/data前缀）
+app.include_router(data_routes_router)
+
+# 注册v1版本路由（向后兼容）
+app.include_router(data_router, prefix="/api/v1")
+app.include_router(trading_router, prefix="/api/v1")
+app.include_router(strategy_router, prefix="/api/v1")
+app.include_router(notification_router, prefix="/api/v1")
 
 # 响应模型类
 class ApiResponse:
@@ -612,6 +624,13 @@ async def startup_event():
             # 创建并启动交易服务
             trading_service = TradingService()
             await trading_service.start()
+            
+            # 初始化数据服务并设置到data_routes
+            from services.data_service import DataService
+            from api.data_routes import set_data_service
+            data_service = DataService()
+            await data_service.start()
+            set_data_service(data_service)
             
             xtquant_service = xtquant_service_instance
             
