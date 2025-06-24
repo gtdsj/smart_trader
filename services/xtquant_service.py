@@ -3,7 +3,7 @@
 XtQuant数据和交易服务模块
 提供完整的xtquant功能封装，包括数据获取、实时订阅、交易委托等
 """
-
+import traceback
 import asyncio
 import time
 import threading
@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 from loguru import logger
 from enum import Enum
+from core.time_utils import TimeUtils
 
 try:
     from xtquant.xttrader import XtQuantTrader, XtQuantTraderCallback
@@ -343,6 +344,17 @@ class XtQuantService:
             
             result = {}
             
+            # 转换时间格式：从 '%Y-%m-%d' 转换为 '%Y%m%d'
+            xt_start_date = None
+            xt_end_date = None
+            if start_date:
+                # 使用TimeUtils转换日期格式
+                xt_start_date = TimeUtils.to_xtquant_date_format(start_date)
+            
+            if end_date:
+                # 使用TimeUtils转换日期格式
+                xt_end_date = TimeUtils.to_xtquant_date_format(end_date)
+            
             # 转换周期参数
             period_map = {
                 Period.TICK: "tick",
@@ -361,15 +373,14 @@ class XtQuantService:
             for stock_code in stock_codes:
                 try:
                     # 先下载补充历史数据
-                    logger.info("download_history_data....1, stock_code: " + stock_code)
                     try:
-                        if start_date and end_date:
+                        if xt_start_date and xt_end_date:
                             # 使用指定时间范围下载数据
                             xtdata.download_history_data(
                                 stock_code=stock_code,
                                 period=xt_period,
-                                start_time=start_date,
-                                end_time=end_date
+                                start_time=xt_start_date,
+                                end_time=xt_end_date
                             )
                         else:
                             # 增量下载最新数据
@@ -378,32 +389,24 @@ class XtQuantService:
                                 period=xt_period,
                                 incrementally=True
                             )
-                        logger.info("download_history_data....2, stock_code: " + stock_code + " 下载完成")
                     except Exception as download_e:
                         logger.warning(f"下载{stock_code}历史数据失败: {download_e}，继续使用现有数据")
                     
                     # 获取历史数据
-                    logger.info("get_history_data....1, stock_code: " + stock_code)
-                    if start_date and end_date:
-                        logger.info("get_history_data....2, stock_code: " + stock_code + ", start_date: " + start_date + ", end_date: " + end_date + ", xt_period: " + xt_period)
+                    if xt_start_date and xt_end_date:
                         data = xtdata.get_market_data(
                             stock_list=[stock_code],
                             period=xt_period,
-                            start_time=start_date,
-                            end_time=end_date
+                            start_time=xt_start_date,
+                            end_time=xt_end_date
                         )
-                        logger.info("get_history_data....3, stock_code: " + stock_code + ", start_date: " + start_date + ", end_date: " + end_date + ", xt_period: " + xt_period)
                     else:
-                        logger.info("get_history_data....4, stock_code: " + stock_code + ", count: " + str(count))
                         data = xtdata.get_market_data(
                             stock_list=[stock_code],
                             period=xt_period,
                             count=count
                         )
-                    logger.info("get_history_data....5, stock_code: " + stock_code )
                     if data and isinstance(data, dict):
-                        logger.info("get_history_data...6, stock_code: " + stock_code + ", data keys: " + str(list(data.keys())))
-                        
                         # 根据API文档，返回格式为 { field1: DataFrame, field2: DataFrame, ... }
                         # DataFrame的index为stock_list，columns为time_list
                         try:
@@ -419,12 +422,11 @@ class XtQuantService:
                                         stock_df_data[field_name] = stock_series
                             
                             if stock_df_data:
-                                # 将所有字段合并为一个DataFrame
+                                # 将所有字段合并为一个DataFrame，时间作为索引
                                 df = pd.DataFrame(stock_df_data)
                                 
-                                # 重置索引，将时间作为列
-                                df = df.reset_index()
-                                df.rename(columns={'index': 'time'}, inplace=True)
+                                # 时间已经是索引，直接重命名索引名称
+                                df.index.name = 'time'
                                 
                                 # 标准化列名映射
                                 column_mapping = {
@@ -441,10 +443,49 @@ class XtQuantService:
                                 existing_columns = {col: column_mapping.get(col, col) for col in df.columns if col in column_mapping}
                                 df.rename(columns=existing_columns, inplace=True)
                                 
-                                # 确保时间列格式正确
-                                if 'time' in df.columns:
-                                    df['time'] = pd.to_datetime(df['time'])
-                                    df.set_index('time', inplace=True)
+                                # 确保时间索引格式正确
+                                try:
+                                    # 检查索引是否有重复值
+                                    if df.index.duplicated().any():
+                                        logger.warning(f"股票{stock_code}的时间数据存在重复，进行去重处理")
+                                        # 保留第一个重复值，删除其他重复值
+                                        df = df[~df.index.duplicated(keep='first')]
+                                    
+                                    # 转换时间格式
+                                    # 处理混合格式的时间数据
+                                    def convert_mixed_time(time_val):
+                                        try:
+                                            return TimeUtils.normalize_timestamp(time_val)
+                                        except Exception as e:
+                                            logger.warning(f"时间转换失败: {time_val}, 错误: {e}")
+                                            return pd.NaT
+                                    
+                                    # 转换索引为时间格式
+                                    df.index = df.index.map(convert_mixed_time)
+                                    # 删除无效的时间数据
+                                    df = df[df.index.notna()]
+                                    
+                                except Exception as time_error:
+                                    logger.warning(f"股票{stock_code}时间转换遇到错误: {time_error}，尝试替代方案")
+                                    # 如果时间转换失败，尝试多种备用方案
+                                    try:
+                                        # 使用TimeUtils工具类转换DataFrame的时间索引
+                                        df = TimeUtils.convert_dataframe_time_index(df)
+                                        
+                                        # 移除无效的时间数据
+                                        if df is not None and not df.empty:
+                                            df = df[df.index.notna()]
+                                        else:
+                                            logger.warning(f"时间索引转换后数据为空")
+                                            return None
+                                        
+                                        # 如果转换后没有有效数据，则跳过
+                                        if df.empty:
+                                            logger.error(f"股票{stock_code}时间转换后无有效数据，跳过该股票")
+                                            continue
+                                    except Exception as e:
+                                        logger.error(f"股票{stock_code}时间转换完全失败: {e}，跳过该股票")
+                                        continue
                                 
                                 result[stock_code] = df
                                 logger.info(f"股票{stock_code}数据处理完成，shape: {df.shape}")
@@ -452,17 +493,11 @@ class XtQuantService:
                                 logger.warning(f"股票{stock_code}在返回数据中未找到有效字段")
                                 
                         except Exception as parse_e:
-                            logger.error(f"解析股票{stock_code}数据失败: {parse_e}")
+                            logger.error(f"解析股票{stock_code}数据失败: {parse_e}, {traceback.format_exc()}")
                             # 尝试备用解析方式（兼容旧格式）
-                            if stock_code in data:
-                                df = data[stock_code]
-                                if df is not None and not df.empty:
-                                    if len(df.columns) >= 7:
-                                        df.columns = ['time', 'open', 'high', 'low', 'close', 'volume', 'amount']
-                                        df['time'] = pd.to_datetime(df['time'])
-                                        df.set_index('time', inplace=True)
-                                        result[stock_code] = df
-                                        logger.info(f"股票{stock_code}使用备用方式解析成功")
+                            logger.warning(f"股票{stock_code}使用标准解析失败，尝试备用解析方式")
+                            # 如果标准解析失败，说明数据格式可能不符合预期，跳过该股票
+                            continue
                     else:
                         logger.warning(f"股票{stock_code}未获取到有效数据，data类型: {type(data)}，data内容: {data}")
                     

@@ -45,14 +45,42 @@ class DuckDBAdapter:
                 if db_dir and not os.path.exists(db_dir):
                     os.makedirs(db_dir, exist_ok=True)
                 
-                self.connection = duckdb.connect(self.db_path)
-                log_info(f"DuckDB连接成功: {self.db_path}")
+                # 检查数据库文件是否存在且可能损坏
+                if os.path.exists(self.db_path):
+                    try:
+                        # 尝试连接现有数据库
+                        self.connection = duckdb.connect(self.db_path)
+                        # 测试连接是否正常
+                        self.connection.execute("SELECT 1")
+                        log_info(f"DuckDB连接成功: {self.db_path}")
+                    except (UnicodeDecodeError, Exception) as e:
+                        log_warning(f"现有数据库文件可能损坏: {e}")
+                        # 备份损坏的数据库文件
+                        backup_path = f"{self.db_path}.backup"
+                        if os.path.exists(backup_path):
+                            os.remove(backup_path)
+                        os.rename(self.db_path, backup_path)
+                        log_info(f"已备份损坏的数据库文件到: {backup_path}")
+                        # 创建新的数据库连接
+                        self.connection = duckdb.connect(self.db_path)
+                        log_info(f"DuckDB重新创建连接成功: {self.db_path}")
+                else:
+                    # 创建新的数据库文件
+                    self.connection = duckdb.connect(self.db_path)
+                    log_info(f"DuckDB新建连接成功: {self.db_path}")
             else:
                 self.connection = duckdb.connect(":memory:")
                 log_info("DuckDB内存数据库连接成功")
         except Exception as e:
             log_error(f"DuckDB连接失败: {e}")
-            raise
+            # 如果仍然失败，尝试使用内存数据库作为备选方案
+            try:
+                log_warning("尝试使用内存数据库作为备选方案")
+                self.connection = duckdb.connect(":memory:")
+                log_info("DuckDB内存数据库备选连接成功")
+            except Exception as fallback_e:
+                log_error(f"备选连接也失败: {fallback_e}")
+                raise
     
     def execute(self, sql: str, params: tuple = None) -> Any:
         """执行SQL语句

@@ -2,7 +2,7 @@
 """
 数据服务模块
 """
-
+import traceback
 import asyncio
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
@@ -11,6 +11,7 @@ import numpy as np
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, update, and_, desc
+from core.time_utils import TimeUtils
 
 from config import get_settings
 from core.database import get_db
@@ -305,10 +306,8 @@ class DataService:
                 return pd.DataFrame()
             
             df = history_data[stock_code].copy()
-            
             # 数据预处理
             df = self._preprocess_daily_data(df, stock_code)
-            
             # 保存到数据库
             if save_to_db and not df.empty:
                 saved_count = await self._save_daily_data_to_db(df, stock_code)
@@ -357,8 +356,13 @@ class DataService:
     def _preprocess_daily_data(self, df: pd.DataFrame, stock_code: str) -> pd.DataFrame:
         """预处理日线数据"""
         try:
-            # 重置索引，将时间列转为普通列
-            df = df.reset_index()
+            # 检查是否需要重置索引，避免重复插入time列
+            if 'time' not in df.columns and df.index.name == 'time':
+                # 重置索引，将时间列转为普通列
+                df = df.reset_index()
+            elif df.index.name == 'time':
+                # 如果已经有time列但索引仍是time，只重置索引不插入新列
+                df = df.reset_index(drop=True)
             
             # 添加股票代码
             df['stock_code'] = stock_code
@@ -373,8 +377,28 @@ class DataService:
             }
             df = df.rename(columns=column_mapping)
             
-            # 确保日期格式正确
-            df['trade_date'] = pd.to_datetime(df['trade_date']).dt.date
+            
+            # 使用TimeUtils工具类处理时间格式
+            try:
+                # 转换trade_date列为标准日期格式
+                df['trade_date'] = df['trade_date'].apply(TimeUtils.to_trade_date)
+                
+                # 移除转换失败的行
+                df = df.dropna(subset=['trade_date'])
+                
+                if df.empty:
+                    logger.error(f"股票{stock_code}时间转换后无有效数据")
+                    return pd.DataFrame()
+                    
+                # 验证时间范围的合理性
+                valid_dates = df['trade_date'].apply(lambda x: TimeUtils.validate_time_range(x))
+                if not valid_dates.all():
+                    invalid_count = (~valid_dates).sum()
+                    logger.warning(f"股票{stock_code}有{invalid_count}条时间数据超出合理范围，已过滤")
+                    df = df[valid_dates]
+            except Exception as e:
+                logger.error(f"股票{stock_code}时间转换失败: {e}")
+                return pd.DataFrame()
             
             # 添加默认值
             if 'turnover_rate' not in df.columns:
@@ -390,14 +414,12 @@ class DataService:
                       'turnover_rate', 'pe_ratio', 'pb_ratio']
             
             df = df[columns]
-            
             # 去除重复数据
             df = df.drop_duplicates(subset=['stock_code', 'trade_date'])
-            
             return df
             
         except Exception as e:
-            logger.error(f"预处理{stock_code}数据失败: {e}")
+            logger.error(f"预处理{stock_code}数据失败: {e}, {traceback.format_exc()}")
             return pd.DataFrame()
     
     async def _save_daily_data_to_db(self, df: pd.DataFrame, stock_code: str) -> int:

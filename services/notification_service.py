@@ -17,6 +17,7 @@ import aiohttp
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert
+from core.time_utils import TimeUtils
 
 from config import get_settings
 from core.database import get_db, NotificationLog
@@ -65,7 +66,9 @@ class DingTalkBot:
     async def send_text(self, content: str, at_mobiles: Optional[List[str]] = None, 
                        at_all: bool = False) -> bool:
         """发送文本消息"""
-        timestamp = str(round(time.time() * 1000))
+        # 使用TimeUtils获取当前毫秒时间戳
+        current_time = TimeUtils.normalize_timestamp(datetime.now())
+        timestamp = str(int(current_time.timestamp() * 1000))
         sign = self._generate_sign(timestamp)
         
         url = self.webhook_url
@@ -103,7 +106,9 @@ class DingTalkBot:
                            at_mobiles: Optional[List[str]] = None, 
                            at_all: bool = False) -> bool:
         """发送Markdown消息"""
-        timestamp = str(round(time.time() * 1000))
+        # 使用TimeUtils获取当前毫秒时间戳
+        current_time = TimeUtils.normalize_timestamp(datetime.now())
+        timestamp = str(int(current_time.timestamp() * 1000))
         sign = self._generate_sign(timestamp)
         
         url = self.webhook_url
