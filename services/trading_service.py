@@ -138,7 +138,7 @@ class TradingService:
                     price = 10.0  # 默认价格
             
             # 使用XtQuantService下单
-            order_result = await self.xtquant_service.place_order(
+            order_id_str = await self.xtquant_service.place_order(
                 stock_code=stock_code,
                 order_type=order_type.value,
                 volume=volume,
@@ -148,11 +148,9 @@ class TradingService:
                 remark=remark
             )
             
-            if not order_result["success"]:
-                logger.error(f"下单失败: {order_result.get('error', '未知错误')}")
+            if not order_id_str:
+                logger.error(f"下单失败: 未获取到订单ID")
                 return None
-            
-            order_id_str = order_result["order_id"]
             
             # 保存订单到数据库
             await self._save_order(
@@ -191,10 +189,10 @@ class TradingService:
         """撤单"""
         try:
             # 使用XtQuantService撤单
-            cancel_result = await self.xtquant_service.cancel_order(order_id)
+            cancel_success = await self.xtquant_service.cancel_order(order_id)
             
-            if not cancel_result["success"]:
-                return cancel_result
+            if not cancel_success:
+                return {"success": False, "error": "撤单失败"}
             
             # 更新订单状态
             await self._update_order_status(order_id, OrderStatus.CANCELLED.value)
@@ -216,11 +214,11 @@ class TradingService:
         try:
             # 使用XtQuantService获取账户资产
             asset_result = await self.xtquant_service.get_account_asset()
-            
-            if asset_result["success"]:
-                return asset_result["data"]
+            logger.info(f"获取账户资产结果: {asset_result}")
+            if asset_result is not None:
+                return asset_result
             else:
-                logger.error(f"获取账户资产失败: {asset_result.get('error', '未知错误')}")
+                logger.error("获取账户资产失败: 返回结果为空")
                 return None
             
         except Exception as e:
@@ -299,7 +297,7 @@ class TradingService:
         try:
             # 优先使用XtQuantService获取当日订单
             orders_result = await self.xtquant_service.get_orders()
-            xt_orders = orders_result["data"] if orders_result["success"] else []
+            xt_orders = orders_result if isinstance(orders_result, list) else []
             
             # 从数据库查询历史订单
             db_orders = []
