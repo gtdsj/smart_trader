@@ -233,13 +233,13 @@ class DataService:
             CREATE TABLE IF NOT EXISTS daily_stock_data (
                 stock_code VARCHAR(20) NOT NULL,
                 trade_date DATE NOT NULL,
-                open_price DECIMAL(10,3),
-                high_price DECIMAL(10,3),
-                low_price DECIMAL(10,3),
-                close_price DECIMAL(10,3),
+                open_price DECIMAL(8,2),
+                high_price DECIMAL(8,2),
+                low_price DECIMAL(8,2),
+                close_price DECIMAL(8,2),
                 volume BIGINT,
-                amount DECIMAL(20,2),
-                turnover_rate DECIMAL(8,4),
+                amount DECIMAL(18,2),
+                turnover_rate DECIMAL(6,4),
                 pe_ratio DECIMAL(8,2),
                 pb_ratio DECIMAL(8,2),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -477,13 +477,18 @@ class DataService:
                     insert_data.append((
                         row['stock_code'],
                         row['trade_date'],
+                        # A股价格数据：保持原始精度，让数据库DECIMAL(8,2)自动处理
                         float(row['open_price']) if pd.notna(row['open_price']) else None,
                         float(row['high_price']) if pd.notna(row['high_price']) else None,
                         float(row['low_price']) if pd.notna(row['low_price']) else None,
                         float(row['close_price']) if pd.notna(row['close_price']) else None,
+                        # 成交量：整数类型
                         int(row['volume']) if pd.notna(row['volume']) else None,
+                        # 成交金额：保持原始精度
                         float(row['amount']) if pd.notna(row['amount']) else None,
+                        # 换手率：保持更高精度用于精确计算
                         float(row['turnover_rate']) if pd.notna(row['turnover_rate']) else None,
+                        # 估值指标：保持原始精度
                         float(row['pe_ratio']) if pd.notna(row['pe_ratio']) else None,
                         float(row['pb_ratio']) if pd.notna(row['pb_ratio']) else None
                     ))
