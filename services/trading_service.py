@@ -3,6 +3,7 @@
 交易服务模块
 """
 
+import traceback
 import asyncio
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
@@ -81,7 +82,7 @@ class TradingService:
             logger.info("交易服务启动完成")
             
         except Exception as e:
-            logger.error(f"交易服务启动失败: {e}")
+            logger.error(f"交易服务启动失败: {e}, {traceback.format_exc()}")
             await self.notification_service.send_system_error_notification(
                 error_type="交易服务启动失败",
                 error_message=str(e),
@@ -105,7 +106,7 @@ class TradingService:
             logger.info("交易服务已停止")
             
         except Exception as e:
-            logger.error(f"停止交易服务失败: {e}")
+            logger.error(f"停止交易服务失败: {e}, {traceback.format_exc()}")
     
     # _connect_xtquant方法已移至XtQuantService
     
@@ -178,7 +179,7 @@ class TradingService:
             return order_id_str
             
         except Exception as e:
-            logger.error(f"下单失败: {e}")
+            logger.error(f"下单失败: {e}, {traceback.format_exc()}")
             await self.notification_service.send_system_error_notification(
                 error_type="下单失败",
                 error_message=str(e),
@@ -204,7 +205,7 @@ class TradingService:
             }
             
         except Exception as e:
-            logger.error(f"撤单失败: {e}")
+            logger.error(f"撤单失败: {e}, {traceback.format_exc()}")
             return {
                 "success": False,
                 "error": str(e)
@@ -223,7 +224,7 @@ class TradingService:
                 return None
             
         except Exception as e:
-            logger.error(f"获取账户资产失败: {e}")
+            logger.error(f"获取账户资产失败: {e}, {traceback.format_exc()}")
             return None
     
     async def get_positions(self) -> List[Dict[str, Any]]:
@@ -272,7 +273,7 @@ class TradingService:
                 break
             return positions
         except Exception as db_e:
-            logger.error(f"从数据库获取持仓失败: {db_e}")
+            logger.error(f"从数据库获取持仓失败: {db_e}, {traceback.format_exc()}")
             return []
     
     async def get_position(self, stock_code: str) -> Dict[str, Any]:
@@ -290,7 +291,7 @@ class TradingService:
             return None
             
         except Exception as e:
-            logger.error(f"获取股票 {stock_code} 持仓失败: {e}")
+            logger.error(f"获取股票 {stock_code} 持仓失败: {e}, {traceback.format_exc()}")
             return None
     
     async def get_orders(self, start_date: str = None, end_date: str = None) -> List[Dict[str, Any]]:
@@ -345,7 +346,7 @@ class TradingService:
             return unique_orders
             
         except Exception as e:
-            logger.error(f"获取订单失败: {e}")
+            logger.error(f"获取持仓失败: {e}, {traceback.format_exc()}")
             return []
     
     async def _risk_check(self, stock_code: str, order_type: OrderType, 
@@ -411,7 +412,7 @@ class TradingService:
             return {"passed": True, "reason": "风控检查通过"}
             
         except Exception as e:
-            logger.error(f"风控检查失败: {e}")
+            logger.error(f"风控检查失败: {e}, {traceback.format_exc()}")
             return {"passed": False, "reason": f"风控检查异常: {e}"}
     
     async def _save_order(self, order_id: str, stock_code: str, order_type: str,
@@ -440,7 +441,7 @@ class TradingService:
                 break
                 
         except Exception as e:
-            logger.error(f"保存订单失败: {e}")
+            logger.error(f"处理成交回报失败: {e}, {traceback.format_exc()}")
     
     async def _update_order_status(self, order_id: str, status: str, 
                                   traded_volume: int = 0):
@@ -460,7 +461,7 @@ class TradingService:
                 break
                 
         except Exception as e:
-            logger.error(f"更新订单状态失败: {e}")
+            logger.error(f"更新订单状态失败: {e}, {traceback.format_exc()}")
     
     async def _handle_trade_callback(self, account_id: str, stock_code: str,
                                    order_id: str, traded_volume: int, 
@@ -480,7 +481,7 @@ class TradingService:
             # ...
             
         except Exception as e:
-            logger.error(f"处理成交回报失败: {e}")
+            logger.error(f"处理成交回报失败: {e}, {traceback.format_exc()}")
     
     async def _handle_order_error(self, order_id: str, error_id: int, error_msg: str):
         """处理订单错误"""
@@ -496,4 +497,4 @@ class TradingService:
             )
             
         except Exception as e:
-            logger.error(f"处理订单错误失败: {e}")
+            logger.error(f"处理订单错误失败: {e}, {traceback.format_exc()}")

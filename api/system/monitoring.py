@@ -9,6 +9,10 @@ from datetime import datetime
 from typing import Dict, Any
 import psutil
 import os
+import logging
+import traceback
+
+logger = logging.getLogger(__name__)
 
 from config import get_settings
 from core.local_cache import get_cache

@@ -4,7 +4,7 @@
 DuckDB适配器
 为Python 3.6提供DuckDB支持
 """
-
+import traceback
 import duckdb
 import os
 from typing import Any, Dict, List, Optional
@@ -72,7 +72,7 @@ class DuckDBAdapter:
                 self.connection = duckdb.connect(":memory:")
                 log_info("DuckDB内存数据库连接成功")
         except Exception as e:
-            log_error(f"DuckDB连接失败: {e}")
+            log_error(f"DuckDB连接失败: {e}, {traceback.format_exc()}")
             # 如果仍然失败，尝试使用内存数据库作为备选方案
             try:
                 log_warning("尝试使用内存数据库作为备选方案")

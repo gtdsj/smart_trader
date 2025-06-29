@@ -6,6 +6,7 @@
 
 import sys
 import os
+import traceback
 from pathlib import Path
 
 # 添加项目根目录到Python路径
@@ -49,7 +50,7 @@ def create_database_tables():
         engine.dispose()
         
     except Exception as e:
-        logger.error(f"创建数据库表失败: {e}")
+        logger.error(f"创建数据库表失败: {e}, {traceback.format_exc()}")
         raise
 
 
@@ -259,7 +260,7 @@ def initialize_services():
         }
         
     except Exception as e:
-        logger.error(f"初始化服务实例失败: {e}")
+        logger.error(f"初始化失败: {e}, {traceback.format_exc()}")
         raise
 
 
@@ -356,7 +357,7 @@ def main():
         print("   - GET /templates - 获取策略模板")
         
     except Exception as e:
-        logger.error(f"初始化策略管理系统失败: {e}")
+        logger.error(f"初始化策略失败: {e}, {traceback.format_exc()}")
         sys.exit(1)
 
 

@@ -3,7 +3,7 @@
 系统状态API
 提供系统运行状态和基本信息
 """
-
+import traceback
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from typing import Dict, Any
@@ -55,6 +55,7 @@ def get_system_status():
             data=status
         ).to_dict()
     except Exception as e:
+        logger.error(f"获取系统状态失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/info", summary="系统信息", description="获取系统详细信息")

@@ -4,6 +4,7 @@
 负责解析和执行策略条件，生成交易信号
 """
 
+import traceback
 import asyncio
 from typing import Dict, List, Optional, Any, Tuple, Union, Callable
 from datetime import datetime, timedelta
@@ -136,7 +137,7 @@ class StrategyExecutor:
                         signal_count += 1
                     
                 except Exception as e:
-                    logger.error(f"执行策略{strategy_id}处理{stock_code}失败: {e}")
+                    logger.error(f"执行策略{strategy_id}处理{stock_code}失败: {e}, {traceback.format_exc()}")
                     continue
             
             # 更新执行记录
@@ -167,7 +168,7 @@ class StrategyExecutor:
             }
             
         except Exception as e:
-            logger.error(f"执行策略失败: {e}")
+            logger.error(f"执行策略失败: {e}, {traceback.format_exc()}")
             # 更新执行记录为失败状态
             if 'execution_id' in locals():
                 await self._update_execution_record(
@@ -203,7 +204,7 @@ class StrategyExecutor:
                 return execution_id
                 
         except Exception as e:
-            logger.error(f"创建执行记录失败: {e}")
+            logger.error(f"创建执行记录失败: {e}, {traceback.format_exc()}")
             raise
     
     async def _update_execution_record(self, execution_id: int, status: str,
@@ -237,7 +238,7 @@ class StrategyExecutor:
                 await db.commit()
                 
         except Exception as e:
-            logger.error(f"更新执行记录失败: {e}")
+            logger.error(f"更新执行记录失败: {e}, {traceback.format_exc()}")
     
     def _calculate_indicators(self, df: pd.DataFrame, strategy: Dict[str, Any]) -> pd.DataFrame:
         """计算技术指标"""
@@ -466,7 +467,7 @@ class StrategyExecutor:
                 return signal_id
                 
         except Exception as e:
-            logger.error(f"保存信号记录失败: {e}")
+            logger.error(f"保存信号记录失败: {e}, {traceback.format_exc()}")
             return 0
     
     # 技术指标计算函数
@@ -632,7 +633,7 @@ class StrategyExecutor:
                 ]
                 
         except Exception as e:
-            logger.error(f"获取策略信号失败: {e}")
+            logger.error(f"获取策略信号失败: {e}, {traceback.format_exc()}")
             return []
     
     async def get_execution_history(self, strategy_id: Optional[int] = None,
@@ -678,5 +679,5 @@ class StrategyExecutor:
                 ]
                 
         except Exception as e:
-            logger.error(f"获取执行历史记录失败: {e}")
+            logger.error(f"获取执行历史记录失败: {e}, {traceback.format_exc()}")
             return []

@@ -4,6 +4,7 @@
 统一管理项目中的时间转换逻辑
 """
 
+import traceback
 import pandas as pd
 from datetime import datetime, date
 from typing import Union, Any
@@ -111,7 +112,7 @@ class TimeUtils:
             return normalized_dt.date()
             
         except Exception as e:
-            logger.error(f"转换交易日期失败: {dt}, 错误: {e}")
+            logger.error(f"转换交易日期失败: {dt}, 错误: {e}, {traceback.format_exc()}")
             raise
     
     @staticmethod
@@ -181,7 +182,7 @@ class TimeUtils:
             return df
             
         except Exception as e:
-            logger.error(f"DataFrame时间列转换失败: {e}")
+            logger.error(f"DataFrame时间列转换失败: {e}, {traceback.format_exc()}")
             return df
     
     @staticmethod
@@ -215,7 +216,7 @@ class TimeUtils:
             return df
             
         except Exception as e:
-            logger.error(f"DataFrame时间索引转换失败: {e}")
+            logger.error(f"DataFrame时间索引转换失败: {e}, {traceback.format_exc()}")
             return df
     
     @staticmethod

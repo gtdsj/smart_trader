@@ -421,7 +421,7 @@ async def get_position(stock_code: str, service: TradingService = Depends(get_tr
 async def get_asset(service: TradingService = Depends(get_trading_service)):
     """查询资产"""
     try:
-        asset = await service.get_asset()
+        asset = await service.get_account_asset()
         if asset:
             return ApiResponse(
                 success=True,

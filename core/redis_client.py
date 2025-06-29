@@ -4,6 +4,7 @@ Redis客户端模块
 """
 
 import json
+import traceback
 from typing import Any, Optional, Dict, List
 import aioredis
 from loguru import logger
@@ -32,7 +33,7 @@ class RedisClient:
             await self.redis.ping()
             logger.info("Redis连接成功")
         except Exception as e:
-            logger.warning(f"Redis连接失败: {e}，将使用本地缓存")
+            logger.warning(f"Redis连接失败: {e}，将使用本地缓存, {traceback.format_exc()}")
             self.redis = None
     
     async def disconnect(self):
@@ -50,7 +51,7 @@ class RedisClient:
             result = await self.redis.set(key, value, ex=expire)
             return result
         except Exception as e:
-            logger.error(f"Redis设置失败: {key}, 错误: {e}")
+            logger.error(f"Redis设置失败: {key}, 错误: {e}, {traceback.format_exc()}")
             return False
     
     async def get(self, key: str) -> Optional[Any]:
@@ -66,7 +67,7 @@ class RedisClient:
             except (json.JSONDecodeError, TypeError):
                 return value
         except Exception as e:
-            logger.error(f"Redis获取失败: {key}, 错误: {e}")
+            logger.error(f"Redis获取失败: {key}, 错误: {e}, {traceback.format_exc()}")
             return None
     
     async def delete(self, key: str) -> bool:
@@ -75,7 +76,7 @@ class RedisClient:
             result = await self.redis.delete(key)
             return result > 0
         except Exception as e:
-            logger.error(f"Redis删除失败: {key}, 错误: {e}")
+            logger.error(f"Redis删除失败: {key}, 错误: {e}, {traceback.format_exc()}")
             return False
     
     async def exists(self, key: str) -> bool:
@@ -84,7 +85,7 @@ class RedisClient:
             result = await self.redis.exists(key)
             return result > 0
         except Exception as e:
-            logger.error(f"Redis检查存在失败: {key}, 错误: {e}")
+            logger.error(f"Redis检查存在失败: {key}, 错误: {e}, {traceback.format_exc()}")
             return False
     
     async def expire(self, key: str, seconds: int) -> bool:
@@ -93,7 +94,7 @@ class RedisClient:
             result = await self.redis.expire(key, seconds)
             return result
         except Exception as e:
-            logger.error(f"Redis设置过期时间失败: {key}, 错误: {e}")
+            logger.error(f"Redis设置过期时间失败: {key}, 错误: {e}, {traceback.format_exc()}")
             return False
     
     async def hset(self, name: str, mapping: Dict[str, Any]) -> int:
@@ -110,7 +111,7 @@ class RedisClient:
             result = await self.redis.hset(name, mapping=serialized_mapping)
             return result
         except Exception as e:
-            logger.error(f"Redis哈希设置失败: {name}, 错误: {e}")
+            logger.error(f"Redis哈希设置失败: {name}, 错误: {e}, {traceback.format_exc()}")
             return 0
     
     async def hget(self, name: str, key: str) -> Optional[Any]:
@@ -126,7 +127,7 @@ class RedisClient:
             except (json.JSONDecodeError, TypeError):
                 return value
         except Exception as e:
-            logger.error(f"Redis哈希获取失败: {name}.{key}, 错误: {e}")
+            logger.error(f"Redis哈希获取失败: {name}.{key}, 错误: {e}, {traceback.format_exc()}")
             return None
     
     async def hgetall(self, name: str) -> Dict[str, Any]:
@@ -144,7 +145,7 @@ class RedisClient:
             
             return deserialized_result
         except Exception as e:
-            logger.error(f"Redis哈希获取全部失败: {name}, 错误: {e}")
+            logger.error(f"Redis哈希获取全部失败: {name}, 错误: {e}, {traceback.format_exc()}")
             return {}
     
     async def lpush(self, name: str, *values) -> int:
@@ -161,7 +162,7 @@ class RedisClient:
             result = await self.redis.lpush(name, *serialized_values)
             return result
         except Exception as e:
-            logger.error(f"Redis列表推送失败: {name}, 错误: {e}")
+            logger.error(f"Redis列表推送失败: {name}, 错误: {e}, {traceback.format_exc()}")
             return 0
     
     async def rpop(self, name: str) -> Optional[Any]:
@@ -177,7 +178,7 @@ class RedisClient:
             except (json.JSONDecodeError, TypeError):
                 return value
         except Exception as e:
-            logger.error(f"Redis列表弹出失败: {name}, 错误: {e}")
+            logger.error(f"Redis列表弹出失败: {name}, 错误: {e}, {traceback.format_exc()}")
             return None
     
     async def lrange(self, name: str, start: int, end: int) -> List[Any]:
@@ -195,7 +196,7 @@ class RedisClient:
             
             return deserialized_values
         except Exception as e:
-            logger.error(f"Redis列表范围获取失败: {name}, 错误: {e}")
+            logger.error(f"Redis列表范围获取失败: {name}, 错误: {e}, {traceback.format_exc()}")
             return []
     
     async def publish(self, channel: str, message: Any) -> int:
@@ -207,7 +208,7 @@ class RedisClient:
             result = await self.redis.publish(channel, message)
             return result
         except Exception as e:
-            logger.error(f"Redis发布消息失败: {channel}, 错误: {e}")
+            logger.error(f"Redis发布消息失败: {channel}, 错误: {e}, {traceback.format_exc()}")
             return 0
 
 

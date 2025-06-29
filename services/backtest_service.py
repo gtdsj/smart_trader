@@ -3,6 +3,7 @@
 回测服务模块
 """
 
+import traceback
 import asyncio
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
@@ -326,7 +327,7 @@ class BacktestService:
             return backtest_id
             
         except Exception as e:
-            logger.error(f"创建回测任务失败: {e}")
+            logger.error(f"创建回测任务失败: {e}, {traceback.format_exc()}")
             return None
     
     async def start_backtest(self, backtest_id: str) -> bool:
@@ -348,7 +349,7 @@ class BacktestService:
             return True
             
         except Exception as e:
-            logger.error(f"启动回测失败: {e}")
+            logger.error(f"启动回测失败: {e}, {traceback.format_exc()}")
             await self._update_backtest_status(backtest_id, BacktestStatus.FAILED)
             return False
     
@@ -382,7 +383,7 @@ class BacktestService:
                 ]
                 
         except Exception as e:
-            logger.error(f"获取回测列表失败: {e}")
+            logger.error(f"获取回测列表失败: {e}, {traceback.format_exc()}")
             return []
     
     async def get_backtest_result(self, backtest_id: str) -> Optional[Dict[str, Any]]:
@@ -426,7 +427,7 @@ class BacktestService:
                 return base_result
                 
         except Exception as e:
-            logger.error(f"获取回测结果失败: {e}")
+            logger.error(f"获取回测结果失败: {e}, {traceback.format_exc()}")
             return None
     
     async def stop_backtest(self, backtest_id: str) -> bool:
@@ -441,7 +442,7 @@ class BacktestService:
             return False
             
         except Exception as e:
-            logger.error(f"停止回测失败: {e}")
+            logger.error(f"停止回测失败: {e}, {traceback.format_exc()}")
             return False
     
     async def _run_backtest(self, backtest_id: str, config: Dict[str, Any]):
@@ -516,7 +517,7 @@ class BacktestService:
             logger.info(f"回测完成: {backtest_id}")
             
         except Exception as e:
-            logger.error(f"回测执行失败 {backtest_id}: {e}")
+            logger.error(f"回测执行失败 {backtest_id}: {e}, {traceback.format_exc()}")
             await self._update_backtest_status(backtest_id, BacktestStatus.FAILED)
             
             await self.notification_service.send_backtest_notification(
@@ -565,7 +566,7 @@ class BacktestService:
                 prices[stock_code] = base_price * (1 + trend + noise)
                 
             except Exception as e:
-                logger.error(f"获取{stock_code}在{date}的价格失败: {e}")
+                logger.error(f"获取{stock_code}在{date}的价格失败: {e}, {traceback.format_exc()}")
                 prices[stock_code] = 10.0  # 默认价格
         
         return prices
@@ -588,11 +589,11 @@ class BacktestService:
                         if signal and signal["signal"] != SignalType.HOLD:
                             signals.append(signal)
                 except Exception as e:
-                    logger.error(f"获取{stock_code}策略信号失败: {e}")
+                    logger.error(f"获取{stock_code}策略信号失败: {e}, {traceback.format_exc()}")
                     continue
         
         except Exception as e:
-            logger.error(f"获取策略信号失败: {e}")
+            logger.error(f"获取策略信号失败: {e}, {traceback.format_exc()}")
         
         return signals
     
@@ -640,7 +641,7 @@ class BacktestService:
                                 logger.debug(f"卖出 {stock_code}: {sell_quantity}股 @ {current_price:.2f}")
         
         except Exception as e:
-            logger.error(f"执行交易信号失败: {e}")
+            logger.error(f"执行交易信号失败: {e}, {traceback.format_exc()}")
     
     async def _save_backtest_result(self, backtest_id: str, portfolio: Portfolio, 
                                   performance: Dict[str, Any]):
@@ -703,7 +704,7 @@ class BacktestService:
             logger.info(f"保存回测结果: {backtest_id}")
             
         except Exception as e:
-            logger.error(f"保存回测结果失败: {e}")
+            logger.error(f"保存回测结果失败: {e}, {traceback.format_exc()}")
     
     async def _update_backtest_status(self, backtest_id: str, status: BacktestStatus):
         """更新回测状态"""
@@ -726,7 +727,7 @@ class BacktestService:
                 await self.redis_client.set(f"backtest_config:{backtest_id}", config, expire=86400)
             
         except Exception as e:
-            logger.error(f"更新回测状态失败: {e}")
+            logger.error(f"更新回测状态失败: {e}, {traceback.format_exc()}")
     
     async def get_backtest_progress(self, backtest_id: str) -> Optional[Dict[str, Any]]:
         """获取回测进度"""
@@ -734,5 +735,5 @@ class BacktestService:
             progress = await self.redis_client.get(f"backtest_progress:{backtest_id}")
             return progress
         except Exception as e:
-            logger.error(f"获取回测进度失败: {e}")
+            logger.error(f"获取回测进度失败: {e}, {traceback.format_exc()}")
             return None

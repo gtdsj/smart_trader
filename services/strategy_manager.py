@@ -3,7 +3,7 @@
 策略管理服务模块
 提供策略的创建、更新、删除、查询和执行功能
 """
-
+import traceback
 import asyncio
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
@@ -156,7 +156,7 @@ class StrategyManager:
                 }
                 
         except Exception as e:
-            logger.error(f"创建策略失败: {e}")
+            logger.error(f"创建策略失败: {e}, {traceback.format_exc()}")
             return {
                 "success": False,
                 "message": f"创建策略失败: {str(e)}",
@@ -310,7 +310,7 @@ class StrategyManager:
                 return strategy_list
                 
         except Exception as e:
-            logger.error(f"获取策略列表失败: {e}")
+            logger.error(f"获取策略列表失败: {e}, {traceback.format_exc()}")
             return []
     
     async def get_strategy_detail(self, strategy_id: int) -> Optional[Dict[str, Any]]:
@@ -359,7 +359,7 @@ class StrategyManager:
                 }
                 
         except Exception as e:
-            logger.error(f"获取策略详情失败: {e}")
+            logger.error(f"获取策略详情失败: {e}, {traceback.format_exc()}")
             return None
     
     async def update_strategy(self, strategy_id: int, 
@@ -420,7 +420,7 @@ class StrategyManager:
                 }
                 
         except Exception as e:
-            logger.error(f"更新策略失败: {e}")
+            logger.error(f"更新策略失败: {e}, {traceback.format_exc()}")
             return {
                 "success": False,
                 "message": f"更新策略失败: {str(e)}",
@@ -481,7 +481,7 @@ class StrategyManager:
                 }
                 
         except Exception as e:
-            logger.error(f"删除策略失败: {e}")
+            logger.error(f"删除策略失败: {e}, {traceback.format_exc()}")
             return {
                 "success": False,
                 "message": f"删除策略失败: {str(e)}",
@@ -517,7 +517,7 @@ class StrategyManager:
                 }
                 
         except Exception as e:
-            logger.error(f"激活策略失败: {e}")
+            logger.error(f"激活策略失败: {e}, {traceback.format_exc()}")
             return {
                 "success": False,
                 "message": f"激活策略失败: {str(e)}",
@@ -553,7 +553,7 @@ class StrategyManager:
                 }
                 
         except Exception as e:
-            logger.error(f"停用策略失败: {e}")
+            logger.error(f"停用策略失败: {e}, {traceback.format_exc()}")
             return {
                 "success": False,
                 "message": f"停用策略失败: {str(e)}",

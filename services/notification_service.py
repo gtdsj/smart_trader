@@ -3,6 +3,7 @@
 通知提醒服务模块
 """
 
+import traceback
 import asyncio
 import time
 import hmac
@@ -99,7 +100,7 @@ class DingTalkBot:
                         logger.error(f"钉钉消息发送失败: {result}")
                         return False
         except Exception as e:
-            logger.error(f"钉钉消息发送异常: {e}")
+            logger.error(f"钉钉消息发送异常: {e}, {traceback.format_exc()}")
             return False
     
     async def send_markdown(self, title: str, text: str, 
@@ -140,7 +141,7 @@ class DingTalkBot:
                         logger.error(f"钉钉Markdown消息发送失败: {result}")
                         return False
         except Exception as e:
-            logger.error(f"钉钉Markdown消息发送异常: {e}")
+            logger.error(f"钉钉Markdown消息发送异常: {e}, {traceback.format_exc()}")
             return False
 
 
@@ -251,7 +252,7 @@ class NotificationService:
             
             return success
         except Exception as e:
-            logger.error(f"发送钉钉通知失败: {e}")
+            logger.error(f"发送钉钉通知失败: {e}, {traceback.format_exc()}")
             await self._save_notification_log(
                 notification_type=notification_type.value,
                 title=title,
@@ -422,5 +423,5 @@ class NotificationService:
                     for log in logs
                 ]
         except Exception as e:
-            logger.error(f"获取通知历史失败: {e}")
+            logger.error(f"获取通知历史失败: {e}, {traceback.format_exc()}")
             return []

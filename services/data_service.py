@@ -62,7 +62,7 @@ class DataService:
             logger.info("数据服务启动成功")
             
         except Exception as e:
-            logger.error(f"启动数据服务失败: {e}")
+            logger.error(f"启动数据服务失败: {e}, {traceback.format_exc()}")
             await self.notification_service.send_system_error_notification(
                 error_type="数据服务启动失败",
                 error_message=str(e),
@@ -89,7 +89,7 @@ class DataService:
             logger.info("数据服务已停止")
             
         except Exception as e:
-            logger.error(f"停止数据服务失败: {e}")
+            logger.error(f"停止数据服务失败: {e}, {traceback.format_exc()}")
     
     async def _data_update_loop(self):
         """数据更新循环"""
@@ -106,7 +106,7 @@ class DataService:
                 await asyncio.sleep(60)  # 1分钟更新一次
                 
             except Exception as e:
-                logger.error(f"数据更新循环异常: {e}")
+                logger.error(f"数据更新循环异常: {e}, {traceback.format_exc()}")
                 await self.notification_service.send_system_error_notification(
                     error_type="数据更新异常",
                     error_message=str(e),
@@ -155,7 +155,7 @@ class DataService:
                 return []
             
         except Exception as e:
-            logger.error(f"获取股票列表失败: {e}")
+            logger.error(f"获取股票列表失败: {e}, {traceback.format_exc()}")
             return []
     
     async def get_realtime_data(self, stock_codes: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -178,7 +178,7 @@ class DataService:
                 return {}
                 
         except Exception as e:
-            logger.error(f"获取实时数据失败: {e}")
+            logger.error(f"获取实时数据失败: {e}, {traceback.format_exc()}")
             return {}
 
     
@@ -214,7 +214,7 @@ class DataService:
                 return pd.DataFrame()
             
         except Exception as e:
-            logger.error(f"获取{stock_code}历史数据失败: {e}")
+            logger.error(f"获取{stock_code}历史数据失败: {e}, {traceback.format_exc()}")
             return pd.DataFrame()
     
     def _init_daily_data_table(self):
@@ -253,7 +253,7 @@ class DataService:
             logger.info("日线数据表初始化完成")
             
         except Exception as e:
-            logger.error(f"初始化日线数据表失败: {e}")
+            logger.error(f"初始化日线数据表失败: {e}, {traceback.format_exc()}")
             raise
     
     async def get_stock_daily_data(self, stock_code: str, start_date: str = None, 
@@ -316,7 +316,7 @@ class DataService:
             return df
             
         except Exception as e:
-            logger.error(f"获取{stock_code}日线数据失败: {e}")
+            logger.error(f"获取{stock_code}日线数据失败: {e}, {traceback.format_exc()}")
             return pd.DataFrame()
     
     def _get_latest_date_from_db(self, stock_code: str) -> Optional[datetime]:
@@ -334,7 +334,7 @@ class DataService:
             return None
             
         except Exception as e:
-            logger.error(f"获取{stock_code}最新日期失败: {e}")
+            logger.error(f"获取{stock_code}最新日期失败: {e}, {traceback.format_exc()}")
             return None
     
     def _get_data_from_db(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
@@ -350,7 +350,7 @@ class DataService:
             return self.duckdb.fetchdf(sql, (stock_code, start_date, end_date))
             
         except Exception as e:
-            logger.error(f"从数据库获取{stock_code}数据失败: {e}")
+            logger.error(f"从数据库获取{stock_code}数据失败: {e}, {traceback.format_exc()}")
             return pd.DataFrame()
     
     def _preprocess_daily_data(self, df: pd.DataFrame, stock_code: str) -> pd.DataFrame:
@@ -397,7 +397,7 @@ class DataService:
                     logger.warning(f"股票{stock_code}有{invalid_count}条时间数据超出合理范围，已过滤")
                     df = df[valid_dates]
             except Exception as e:
-                logger.error(f"股票{stock_code}时间转换失败: {e}")
+                logger.error(f"股票{stock_code}时间转换失败: {e}, {traceback.format_exc()}")
                 return pd.DataFrame()
             
             # 添加默认值
@@ -466,13 +466,13 @@ class DataService:
                     ))
                     saved_count += 1
                 except Exception as e:
-                    logger.error(f"保存{stock_code}单条数据失败: {e}")
+                    logger.error(f"保存{stock_code}单条数据失败: {e}, {traceback.format_exc()}")
                     continue
             
             return saved_count
             
         except Exception as e:
-            logger.error(f"保存{stock_code}日线数据到数据库失败: {e}")
+            logger.error(f"保存{stock_code}日线数据到数据库失败: {e}, {traceback.format_exc()}")
             return 0
     
     async def batch_update_daily_data(self, stock_codes: List[str]) -> Dict[str, Any]:
@@ -504,7 +504,7 @@ class DataService:
                 except Exception as e:
                     results['failed_count'] += 1
                     results['failed_stocks'].append(stock_code)
-                    logger.error(f"更新{stock_code}失败: {e}")
+                    logger.error(f"更新{stock_code}失败: {e}, {traceback.format_exc()}")
                     
                 # 添加延迟，避免请求过于频繁
                 await asyncio.sleep(0.1)
@@ -513,7 +513,7 @@ class DataService:
             return results
             
         except Exception as e:
-            logger.error(f"批量更新日线数据失败: {e}")
+            logger.error(f"批量更新日线数据失败: {e}, {traceback.format_exc()}")
             return {
                 'success_count': 0,
                 'failed_count': len(stock_codes),
@@ -552,7 +552,7 @@ class DataService:
                 break
                 
         except Exception as e:
-            logger.error(f"保存股票数据失败: {e}")
+            logger.error(f"保存股票数据失败: {e}, {traceback.format_exc()}")
     
     async def _update_realtime_data(self):
         """更新实时数据"""
@@ -583,7 +583,7 @@ class DataService:
             logger.info(f"更新了{len(realtime_data)}只股票的实时数据")
             
         except Exception as e:
-            logger.error(f"更新实时数据失败: {e}")
+            logger.error(f"更新实时数据失败: {e}, {traceback.format_exc()}")
     
     async def _update_historical_data(self):
         """更新历史数据"""
@@ -618,7 +618,7 @@ class DataService:
             logger.info(f"更新了{len(stock_list)}只股票的历史数据")
             
         except Exception as e:
-            logger.error(f"更新历史数据失败: {e}")
+            logger.error(f"更新历史数据失败: {e}, {traceback.format_exc()}")
     
     async def _get_watched_stocks(self) -> List[str]:
         """获取关注的股票列表"""
@@ -650,7 +650,7 @@ class DataService:
                 
                 return stocks
         except Exception as e:
-            logger.error(f"获取需要更新的股票列表失败: {e}")
+            logger.error(f"获取需要更新的股票列表失败: {e}, {traceback.format_exc()}")
             return []
     
     async def add_watched_stock(self, stock_code: str) -> bool:
@@ -663,7 +663,7 @@ class DataService:
                 logger.info(f"添加关注股票: {stock_code}")
             return True
         except Exception as e:
-            logger.error(f"添加关注股票失败: {e}")
+            logger.error(f"添加关注股票失败: {e}, {traceback.format_exc()}")
             return False
     
     async def remove_watched_stock(self, stock_code: str) -> bool:
@@ -676,7 +676,7 @@ class DataService:
                 logger.info(f"移除关注股票: {stock_code}")
             return True
         except Exception as e:
-            logger.error(f"移除关注股票失败: {e}")
+            logger.error(f"移除关注股票失败: {e}, {traceback.format_exc()}")
             return False
     
     async def get_market_overview(self) -> Dict[str, Any]:
@@ -703,5 +703,5 @@ class DataService:
             return overview
             
         except Exception as e:
-            logger.error(f"获取市场概览失败: {e}")
+            logger.error(f"获取市场概览失败: {e}, {traceback.format_exc()}")
             return {}

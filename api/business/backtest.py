@@ -3,7 +3,7 @@
 回测业务API
 提供量化策略回测功能
 """
-
+import traceback
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 from datetime import datetime, date
@@ -99,6 +99,7 @@ def get_backtest_overview():
         ).to_dict()
         
     except Exception as e:
+        logger.error(f"创建回测任务失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/list", summary="回测列表", description="获取回测任务列表")

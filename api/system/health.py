@@ -7,10 +7,14 @@
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from typing import Dict, Any
+import traceback
+import logging
 
 from config import get_settings
 from core.local_cache import get_cache
 from core.duckdb_adapter import get_duckdb
+
+logger = logging.getLogger(__name__)
 
 # 创建健康检查路由器
 router = APIRouter(prefix="/health", tags=["系统健康"])

@@ -3,6 +3,7 @@
 选股服务模块
 """
 
+import traceback
 import asyncio
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
@@ -85,7 +86,7 @@ class StrategyService:
                 return True
                 
         except Exception as e:
-            logger.error(f"创建策略失败: {e}")
+            logger.error(f"创建策略失败: {e}, {traceback.format_exc()}")
             return False
     
     async def get_strategies(self, active_only: bool = False) -> List[Dict[str, Any]]:
@@ -114,7 +115,7 @@ class StrategyService:
                 ]
                 
         except Exception as e:
-            logger.error(f"获取策略列表失败: {e}")
+            logger.error(f"获取策略列表失败: {e}, {traceback.format_exc()}")
             return []
     
     async def activate_strategy(self, strategy_id: int) -> bool:
@@ -135,7 +136,7 @@ class StrategyService:
                 return True
                 
         except Exception as e:
-            logger.error(f"激活策略失败: {e}")
+            logger.error(f"激活策略失败: {e}, {traceback.format_exc()}")
             return False
     
     async def deactivate_strategy(self, strategy_id: int) -> bool:
@@ -156,7 +157,7 @@ class StrategyService:
                 return True
                 
         except Exception as e:
-            logger.error(f"停用策略失败: {e}")
+            logger.error(f"停用策略失败: {e}, {traceback.format_exc()}")
             return False
     
     async def run_strategy_scan(self, strategy_name: str, 
@@ -185,7 +186,7 @@ class StrategyService:
                     if signal and signal["signal"] != SignalType.HOLD:
                         signals.append(signal)
                 except Exception as e:
-                    logger.error(f"策略{strategy_name}处理{stock_code}失败: {e}")
+                    logger.error(f"策略{strategy_name}处理{stock_code}失败: {e}, {traceback.format_exc()}")
                     continue
             
             # 按信号强度排序
@@ -195,7 +196,7 @@ class StrategyService:
             return signals
             
         except Exception as e:
-            logger.error(f"运行策略扫描失败: {e}")
+            logger.error(f"运行策略扫描失败: {e}, {traceback.format_exc()}")
             return []
     
     async def run_all_active_strategies(self) -> Dict[str, List[Dict[str, Any]]]:
@@ -217,7 +218,7 @@ class StrategyService:
             return results
             
         except Exception as e:
-            logger.error(f"运行所有激活策略失败: {e}")
+            logger.error(f"运行所有激活策略失败: {e}, {traceback.format_exc()}")
             return {}
     
     async def _get_stock_data(self, stock_code: str, days: int = 30) -> pd.DataFrame:
@@ -232,7 +233,7 @@ class StrategyService:
                 raise Exception("数据服务未初始化，无法获取股票数据")
                 
         except Exception as e:
-            logger.error(f"获取{stock_code}数据失败: {e}")
+            logger.error(f"获取{stock_code}数据失败: {e}, {traceback.format_exc()}")
             return pd.DataFrame()
     
     async def _ma_cross_strategy(self, stock_code: str) -> Optional[Dict[str, Any]]:
@@ -285,7 +286,7 @@ class StrategyService:
             }
             
         except Exception as e:
-            logger.error(f"均线交叉策略处理{stock_code}失败: {e}")
+            logger.error(f"均线交叉策略处理{stock_code}失败: {e}, {traceback.format_exc()}")
             return None
     
     async def _rsi_oversold_strategy(self, stock_code: str) -> Optional[Dict[str, Any]]:
@@ -339,7 +340,7 @@ class StrategyService:
             }
             
         except Exception as e:
-            logger.error(f"RSI策略处理{stock_code}失败: {e}")
+            logger.error(f"RSI策略处理{stock_code}失败: {e}, {traceback.format_exc()}")
             return None
     
     async def _bollinger_bands_strategy(self, stock_code: str) -> Optional[Dict[str, Any]]:
@@ -391,7 +392,7 @@ class StrategyService:
             }
             
         except Exception as e:
-            logger.error(f"布林带策略处理{stock_code}失败: {e}")
+            logger.error(f"布林带策略处理{stock_code}失败: {e}, {traceback.format_exc()}")
             return None
     
     async def _volume_breakout_strategy(self, stock_code: str) -> Optional[Dict[str, Any]]:
@@ -445,7 +446,7 @@ class StrategyService:
             }
             
         except Exception as e:
-            logger.error(f"成交量突破策略处理{stock_code}失败: {e}")
+            logger.error(f"成交量突破策略处理{stock_code}失败: {e}, {traceback.format_exc()}")
             return None
     
     async def _momentum_strategy(self, stock_code: str) -> Optional[Dict[str, Any]]:
@@ -498,7 +499,7 @@ class StrategyService:
             }
             
         except Exception as e:
-            logger.error(f"动量策略处理{stock_code}失败: {e}")
+            logger.error(f"动量策略处理{stock_code}失败: {e}, {traceback.format_exc()}")
             return None
     
     async def _mean_reversion_strategy(self, stock_code: str) -> Optional[Dict[str, Any]]:
@@ -549,7 +550,7 @@ class StrategyService:
             }
             
         except Exception as e:
-            logger.error(f"均值回归策略处理{stock_code}失败: {e}")
+            logger.error(f"均值回归策略处理{stock_code}失败: {e}, {traceback.format_exc()}")
             return None
     
     async def _macd_signal_strategy(self, stock_code: str) -> Optional[Dict[str, Any]]:

@@ -3,7 +3,7 @@
 数据业务API
 提供股票数据获取和管理功能
 """
-
+import traceback
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from datetime import datetime, date
@@ -89,7 +89,7 @@ async def get_data_overview():
         ).to_dict()
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"{str(e)}, {traceback.format_exc()}")
 
 @router.get("/stocks", summary="股票列表", description="获取股票列表")
 async def get_stock_list(

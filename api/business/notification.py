@@ -3,7 +3,7 @@
 通知业务API
 提供消息通知和告警功能
 """
-
+import traceback
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from datetime import datetime
@@ -127,7 +127,7 @@ def get_notification_overview():
         ).to_dict()
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"{str(e)}, {traceback.format_exc()}")
 
 @router.get("/list", summary="通知列表", description="获取通知记录列表")
 def get_notification_list(

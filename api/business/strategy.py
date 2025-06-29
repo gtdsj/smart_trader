@@ -3,7 +3,7 @@
 策略业务API
 提供量化策略管理和执行功能
 """
-
+import traceback
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from datetime import datetime
@@ -94,7 +94,7 @@ def get_strategy_overview():
         ).to_dict()
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"{str(e)}, {traceback.format_exc()}")
 
 @router.get("/list", summary="策略列表", description="获取策略列表")
 def get_strategy_list(

@@ -3,7 +3,7 @@
 交易业务API
 提供股票交易相关的业务功能
 """
-
+import traceback
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
@@ -100,7 +100,7 @@ async def get_trading_overview():
         ).to_dict()
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"{str(e)}, {traceback.format_exc()}")
 
 @router.post("/order", summary="下单", description="提交股票交易订单")
 async def place_order(order_request: OrderRequest):

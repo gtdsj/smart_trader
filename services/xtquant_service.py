@@ -60,7 +60,7 @@ class XtQuantDataCallback:
                     self.xtquant_service._handle_realtime_data(stock_code, data)
                 )
         except Exception as e:
-            logger.error(f"处理实时数据回调失败: {e}")
+            logger.error(f"处理实时数据回调失败: {e}, {traceback.format_exc()}")
 
 
 if XtQuantTraderCallback is not None:
@@ -205,7 +205,7 @@ class XtQuantService:
             logger.info("XtQuant服务启动完成")
             
         except Exception as e:
-            logger.error(f"XtQuant服务启动失败: {e}")
+            logger.error(f"XtQuant服务启动失败: {e}, {traceback.format_exc()}")
             await self.notification_service.send_system_error_notification(
                 error_type="XtQuant服务启动失败",
                 error_message=str(e),
@@ -234,7 +234,7 @@ class XtQuantService:
             logger.info("XtQuant服务已停止")
             
         except Exception as e:
-            logger.error(f"停止XtQuant服务失败: {e}")
+            logger.error(f"停止XtQuant服务失败: {e}, {traceback.format_exc()}")
     
     async def _init_data_connection(self):
         """初始化数据连接"""
@@ -254,7 +254,7 @@ class XtQuantService:
             logger.info("XtQuant数据连接成功")
             
         except Exception as e:
-            logger.error(f"初始化数据连接失败: {e}")
+            logger.error(f"初始化数据连接失败: {e}, {traceback.format_exc()}")
             raise
     
     async def _init_trading_connection(self):
@@ -296,7 +296,7 @@ class XtQuantService:
             logger.info("XtQuant交易连接成功, is_trading_connected: " + str(self.is_trading_connected))
             
         except Exception as e:
-            logger.error(f"初始化交易连接失败: {e}")
+            logger.error(f"初始化交易连接失败: {e}, {traceback.format_exc()}")
             raise
     
     # ==================== 数据获取功能 ====================
@@ -331,7 +331,7 @@ class XtQuantService:
             return stock_list
             
         except Exception as e:
-            logger.error(f"获取股票列表失败: {e}")
+            logger.error(f"获取股票列表失败: {e}, {traceback.format_exc()}")
             return []
     
     async def get_history_data(self, stock_codes: List[str], period: Period = Period.DAILY,
@@ -487,7 +487,7 @@ class XtQuantService:
                                             logger.error(f"股票{stock_code}时间转换后无有效数据，跳过该股票")
                                             continue
                                     except Exception as e:
-                                        logger.error(f"股票{stock_code}时间转换完全失败: {e}，跳过该股票")
+                                        logger.error(f"股票{stock_code}时间转换完全失败: {e}, {traceback.format_exc()}，跳过该股票")
                                         continue
                                 
                                 result[stock_code] = df
@@ -505,13 +505,13 @@ class XtQuantService:
                         logger.warning(f"股票{stock_code}未获取到有效数据，data类型: {type(data)}，data内容: {data}")
                     
                 except Exception as e:
-                    logger.error(f"获取{stock_code}历史数据失败: {e}")
+                    logger.error(f"获取{stock_code}历史数据失败: {e}, {traceback.format_exc()}")
                     continue
             
             return result
             
         except Exception as e:
-            logger.error(f"获取历史数据失败: {e}")
+            logger.error(f"获取历史数据失败: {e}, {traceback.format_exc()}")
             return {}
     
     async def get_realtime_data(self, stock_codes: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -555,13 +555,13 @@ class XtQuantService:
                             result[stock_code]["change_ratio"] = 0
                     
                 except Exception as e:
-                    logger.error(f"获取{stock_code}实时数据失败: {e}")
+                    logger.error(f"获取{stock_code}实时数据失败: {e}, {traceback.format_exc()}")
                     continue
             
             return result
             
         except Exception as e:
-            logger.error(f"获取实时数据失败: {e}")
+            logger.error(f"获取实时数据失败: {e}, {traceback.format_exc()}")
             return {}
     
     async def subscribe_realtime_data(self, stock_codes: List[str], 
@@ -588,7 +588,7 @@ class XtQuantService:
                     logger.info(f"订阅{stock_code}实时数据成功")
             
         except Exception as e:
-            logger.error(f"订阅实时数据失败: {e}")
+            logger.error(f"订阅实时数据失败: {e}, {traceback.format_exc()}")
     
     async def unsubscribe_realtime_data(self, stock_codes: List[str]):
         """取消订阅实时数据"""
@@ -606,7 +606,7 @@ class XtQuantService:
                     logger.info(f"取消订阅{stock_code}实时数据")
             
         except Exception as e:
-            logger.error(f"取消订阅实时数据失败: {e}")
+            logger.error(f"取消订阅实时数据失败: {e}, {traceback.format_exc()}")
     
     # ==================== 交易功能 ====================
     
@@ -656,7 +656,7 @@ class XtQuantService:
             return str(order_id)
             
         except Exception as e:
-            logger.error(f"下单失败: {e}")
+            logger.error(f"下单失败: {e}, {traceback.format_exc()}")
             return None
     
     async def cancel_order(self, order_id: str) -> bool:
@@ -675,7 +675,7 @@ class XtQuantService:
             return True
             
         except Exception as e:
-            logger.error(f"撤单失败: {e}")
+            logger.error(f"撤单失败: {e}, {traceback.format_exc()}")
             return False
     
     async def get_account_asset(self) -> Optional[Dict[str, Any]]:
@@ -699,7 +699,7 @@ class XtQuantService:
             return None
             
         except Exception as e:
-            logger.error(f"获取账户资产失败: {e}")
+            logger.error(f"获取账户资产失败: {e}, {traceback.format_exc()}")
             return None
     
     async def get_positions(self) -> List[Dict[str, Any]]:
@@ -744,7 +744,7 @@ class XtQuantService:
             return positions
             
         except Exception as e:
-            logger.error(f"获取持仓失败: {e}")
+            logger.error(f"获取持仓失败: {e}, {traceback.format_exc()}")
             return []
     
     async def get_orders(self, limit: int = 100) -> List[Dict[str, Any]]:
@@ -772,7 +772,7 @@ class XtQuantService:
             return orders
             
         except Exception as e:
-            logger.error(f"获取订单列表失败: {e}")
+            logger.error(f"获取订单列表失败: {e}, {traceback.format_exc()}")
             return []
     
     async def get_trades(self, limit: int = 100) -> List[Dict[str, Any]]:
@@ -800,7 +800,7 @@ class XtQuantService:
             return trades
             
         except Exception as e:
-            logger.error(f"获取成交记录失败: {e}")
+            logger.error(f"获取成交记录失败: {e}, {traceback.format_exc()}")
             return []
     
     # ==================== 回调处理 ====================
@@ -821,10 +821,10 @@ class XtQuantService:
                 try:
                     await callback(stock_code, data)
                 except Exception as e:
-                    logger.error(f"实时数据回调函数执行失败: {e}")
+                    logger.error(f"实时数据回调函数执行失败: {e}, {traceback.format_exc()}")
             
         except Exception as e:
-            logger.error(f"处理实时数据推送失败: {e}")
+            logger.error(f"处理实时数据推送失败: {e}, {traceback.format_exc()}")
     
     async def _handle_order_callback(self, order):
         """处理订单回调"""
@@ -842,10 +842,10 @@ class XtQuantService:
                 try:
                     await callback(order_data)
                 except Exception as e:
-                    logger.error(f"订单回调函数执行失败: {e}")
+                    logger.error(f"订单回调函数执行失败: {e}, {traceback.format_exc()}")
             
         except Exception as e:
-            logger.error(f"处理订单回调失败: {e}")
+            logger.error(f"处理订单回调失败: {e}, {traceback.format_exc()}")
     
     async def _handle_trade_callback(self, trade):
         """处理成交回调"""
@@ -864,10 +864,10 @@ class XtQuantService:
                 try:
                     await callback(trade_data)
                 except Exception as e:
-                    logger.error(f"成交回调函数执行失败: {e}")
+                    logger.error(f"成交回调函数执行失败: {e}, {traceback.format_exc()}")
             
         except Exception as e:
-            logger.error(f"处理成交回调失败: {e}")
+            logger.error(f"处理成交回调失败: {e}, {traceback.format_exc()}")
     
     async def _handle_order_error(self, order_error):
         """处理订单错误"""
@@ -878,7 +878,7 @@ class XtQuantService:
                 module="XtQuantService"
             )
         except Exception as e:
-            logger.error(f"处理订单错误失败: {e}")
+            logger.error(f"处理订单错误失败: {e}, {traceback.format_exc()}")
     
     # ==================== 工具方法 ====================
     
