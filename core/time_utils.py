@@ -74,13 +74,13 @@ class TimeUtils:
         timestamp_str = str(int(timestamp))
         
         # 根据数字长度判断时间戳类型
-        if len(timestamp_str) == 8:
+        if len(timestamp_str) <= 8:
             # YYYYMMDD格式
             return pd.to_datetime(timestamp_str, format='%Y%m%d')
-        elif len(timestamp_str) == 10:
+        elif len(timestamp_str) <= 10:
             # 秒时间戳，转换为本地时区
             return pd.to_datetime(timestamp, unit='s', utc=True).tz_convert('Asia/Shanghai').tz_localize(None)
-        elif len(timestamp_str) == 13:
+        elif len(timestamp_str) <= 13:
             # 毫秒时间戳，转换为本地时区
             return pd.to_datetime(timestamp, unit='ms', utc=True).tz_convert('Asia/Shanghai').tz_localize(None)
         elif len(timestamp_str) > 13:
@@ -88,7 +88,9 @@ class TimeUtils:
             return pd.to_datetime(timestamp, unit='ns', utc=True).tz_convert('Asia/Shanghai').tz_localize(None)
         else:
             # 其他情况，尝试直接转换
-            return pd.to_datetime(timestamp)
+            dt = pd.to_datetime(timestamp)
+            logger.error(f"无法识别的时间戳格式: {timestamp}, 长度: {len(timestamp_str)}, {dt}")
+            return dt
     
     @staticmethod
     def to_trade_date(dt: Any) -> date:
@@ -139,7 +141,6 @@ class TimeUtils:
                 return False
             
             return min_date <= normalized_dt <= max_date
-            
         except Exception:
             return False
     

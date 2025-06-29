@@ -316,7 +316,6 @@ class XtQuantService:
                 sh_stocks = xtdata.get_stock_list_in_sector("上证A股")
                 sz_stocks = xtdata.get_stock_list_in_sector("深证A股")
                 stocks = sh_stocks + sz_stocks
-            logger.info(f"get_stock_list...1, {stocks}")
             stock_list = []
             for stock_code in stocks:
                 # 获取股票基本信息

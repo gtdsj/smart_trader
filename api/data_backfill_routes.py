@@ -28,7 +28,7 @@ class BackfillTaskRequest(BaseModel):
     end_date: Optional[str] = Field(None, description="结束日期，格式YYYY-MM-DD")
     stock_codes: Optional[List[str]] = Field(None, description="指定股票代码列表，为空则处理全市场")
     batch_size: int = Field(30, description="批量处理大小", ge=1, le=100)
-    delay_seconds: float = Field(0.2, description="批次间延迟秒数", ge=0.1, le=5.0)
+    delay_seconds: float = Field(0.2, description="批次间延迟秒数", ge=0.000001, le=5.0)
     force_update: bool = Field(False, description="是否强制更新已存在的数据")
     priority: str = Field("normal", description="任务优先级：low、normal、high")
     auto_retry: bool = Field(True, description="是否自动重试失败的股票")

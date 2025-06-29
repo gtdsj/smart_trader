@@ -148,7 +148,6 @@ class DataService:
             
             # 从XtQuant获取
             stock_result = await self.xtquant_service.get_stock_list()
-            logger.info(f"从XtQuant获取股票列表:{stock_result}")
             if stock_result:
                 stocks = stock_result
                 
@@ -291,8 +290,11 @@ class DataService:
                 latest_date = self._get_latest_date_from_db(stock_code)
                 if latest_date:
                     # 从最新日期的下一天开始获取（增量更新）
-                    start_date = (latest_date + timedelta(days=1)).strftime('%Y-%m-%d')
-                    logger.info(f"{stock_code}数据库中最新日期: {latest_date}, 从{start_date}开始增量更新")
+                    try:
+                        start_date = (latest_date + timedelta(days=1)).strftime('%Y-%m-%d')
+                        logger.info(f"{stock_code}数据库中最新日期: {latest_date}, 从{start_date}开始增量更新")
+                    except:
+                        logger.error(f"{stock_code}数据库中最新日期: {latest_date} 转换失败")
                 else:
                     # 如果数据库中没有数据，从XtQuant获取全部数据
                     start_date = '1990-01-01'
@@ -315,9 +317,12 @@ class DataService:
                 logger.warning(f"未获取到{stock_code}的数据")
                 return pd.DataFrame()
             
+            logger.info(f"before copy, 获取到{stock_code}的{len(history_data[stock_code])}条数据")
             df = history_data[stock_code].copy()
             # 数据预处理
+            logger.info(f"before preprocess, {stock_code}获取到{len(df)}条数据")
             df = self._preprocess_daily_data(df, stock_code)
+            logger.info(f"after preprocess, {stock_code}获取到{len(df)}条数据")
             # 保存到数据库
             if save_to_db and not df.empty:
                 saved_count = await self._save_daily_data_to_db(df, stock_code)
@@ -404,7 +409,7 @@ class DataService:
                 valid_dates = df['trade_date'].apply(lambda x: TimeUtils.validate_time_range(x))
                 if not valid_dates.all():
                     invalid_count = (~valid_dates).sum()
-                    logger.warning(f"股票{stock_code}有{invalid_count}条时间数据超出合理范围，已过滤")
+                    # logger.warning(f"股票{stock_code}有{invalid_count}条时间数据超出合理范围，已过滤")
                     df = df[valid_dates]
             except Exception as e:
                 logger.error(f"股票{stock_code}时间转换失败: {e}, {traceback.format_exc()}")
