@@ -438,35 +438,43 @@ class DataService:
             return pd.DataFrame()
     
     async def _save_daily_data_to_db(self, df: pd.DataFrame, stock_code: str) -> int:
-        """保存日线数据到数据库"""
+        """保存日线数据到数据库（批量优化版本）"""
         try:
             if df.empty:
                 return 0
             
-            # 先删除已存在的记录，再插入新记录（DuckDB兼容方式）
-            delete_sql = """
-            DELETE FROM daily_stock_data 
-            WHERE stock_code = ? AND trade_date = ?
-            """
+            # 开始事务
+            self.duckdb.execute("BEGIN TRANSACTION")
             
-            insert_sql = """
-            INSERT INTO daily_stock_data 
-            (stock_code, trade_date, open_price, high_price, low_price, 
-             close_price, volume, amount, turnover_rate, pe_ratio, pb_ratio, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            """
-            
-            saved_count = 0
-            for _, row in df.iterrows():
-                try:
-                    # 先删除已存在的记录
-                    self.duckdb.execute(delete_sql, (
-                        row['stock_code'],
-                        row['trade_date']
-                    ))
+            try:
+                # 批量删除已存在的记录
+                if len(df) > 0:
+                    # 构建删除条件
+                    delete_conditions = []
+                    delete_params = []
+                    for _, row in df.iterrows():
+                        delete_conditions.append("(stock_code = ? AND trade_date = ?)")
+                        delete_params.extend([row['stock_code'], row['trade_date']])
                     
-                    # 插入新记录
-                    self.duckdb.execute(insert_sql, (
+                    if delete_conditions:
+                        delete_sql = f"""
+                        DELETE FROM daily_stock_data 
+                        WHERE {' OR '.join(delete_conditions)}
+                        """
+                        self.duckdb.execute(delete_sql, delete_params)
+                
+                # 批量插入新记录
+                insert_sql = """
+                INSERT INTO daily_stock_data 
+                (stock_code, trade_date, open_price, high_price, low_price, 
+                 close_price, volume, amount, turnover_rate, pe_ratio, pb_ratio, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """
+                
+                # 准备批量插入数据
+                insert_data = []
+                for _, row in df.iterrows():
+                    insert_data.append((
                         row['stock_code'],
                         row['trade_date'],
                         float(row['open_price']) if pd.notna(row['open_price']) else None,
@@ -479,12 +487,19 @@ class DataService:
                         float(row['pe_ratio']) if pd.notna(row['pe_ratio']) else None,
                         float(row['pb_ratio']) if pd.notna(row['pb_ratio']) else None
                     ))
-                    saved_count += 1
-                except Exception as e:
-                    logger.error(f"保存{stock_code}单条数据失败: {e}, {traceback.format_exc()}")
-                    continue
-            
-            return saved_count
+                
+                # 执行批量插入
+                self.duckdb.executemany(insert_sql, insert_data)
+                
+                # 提交事务
+                self.duckdb.execute("COMMIT")
+                
+                return len(insert_data)
+                
+            except Exception as e:
+                # 回滚事务
+                self.duckdb.execute("ROLLBACK")
+                raise e
             
         except Exception as e:
             logger.error(f"保存{stock_code}日线数据到数据库失败: {e}, {traceback.format_exc()}")

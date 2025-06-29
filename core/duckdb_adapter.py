@@ -102,6 +102,23 @@ class DuckDBAdapter:
             log_error(f"SQL执行失败: {sql}, 错误: {e}")
             raise
     
+    def executemany(self, sql: str, params_list: List[tuple]) -> Any:
+        """批量执行SQL语句
+        
+        Args:
+            sql: SQL语句
+            params_list: 参数列表
+        
+        Returns:
+            执行结果
+        """
+        try:
+            result = self.connection.executemany(sql, params_list)
+            return result
+        except Exception as e:
+            log_error(f"批量SQL执行失败: {sql}, 错误: {e}")
+            raise
+    
     def fetchall(self, sql: str, params: tuple = None) -> List[tuple]:
         """查询所有结果
         
