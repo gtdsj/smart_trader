@@ -132,30 +132,39 @@ class DataService:
         
         return (morning_start <= time_str <= morning_end) or (afternoon_start <= time_str <= afternoon_end)
     
-    async def get_stock_list(self, market: str = "all") -> List[Dict[str, Any]]:
-        """获取股票列表"""
-        cache_key = f"stock_list:{market}"
+    async def get_stock_list(self, market: str = None) -> List[Dict[str, Any]]:
+        """获取股票列表
         
-        # 尝试从缓存获取
-        cached_data = await self.redis_client.get(cache_key)
-        if cached_data:
-            return cached_data
-        
+        Args:
+            market: 市场代码，如SH、SZ，None表示获取所有市场
+        """
         try:
-            # 使用XtQuantService获取股票列表
-            stock_list_result = await self.xtquant_service.get_stock_list(market)
+            # 构建缓存键
+            cache_key = f"stock_list:{market or 'ALL'}"
+            cached_data = await self.redis_client.get(cache_key)
+            if cached_data:
+                logger.debug(f"从缓存获取{market or '全部'}市场股票列表")
+                return cached_data
             
-            if stock_list_result["success"]:
-                stock_list = stock_list_result["data"]
-                # 缓存数据
-                await self.redis_client.set(cache_key, stock_list, expire=3600)  # 1小时缓存
-                return stock_list
+            # 从XtQuant获取
+            stock_result = self.xtquant_service.get_stock_list()
+            if stock_result:
+                stocks = stock_result
+                
+                # 根据市场过滤
+                if market and market != "ALL":
+                    stocks = [stock for stock in stocks if stock.get("market") == market]
+                
+                # 缓存30分钟
+                await self.redis_client.set(cache_key, stocks, expire=1800)
+                logger.info(f"获取{market or '全部'}市场股票列表成功，共{len(stocks)}只股票")
+                return stocks
             else:
-                logger.error(f"获取股票列表失败: {stock_list_result.get('error', '未知错误')}")
+                logger.error("获取股票列表失败")
                 return []
-            
+                
         except Exception as e:
-            logger.error(f"获取股票列表失败: {e}, {traceback.format_exc()}")
+            logger.error(f"获取股票列表异常: {e}, {traceback.format_exc()}")
             return []
     
     async def get_realtime_data(self, stock_codes: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -475,53 +484,122 @@ class DataService:
             logger.error(f"保存{stock_code}日线数据到数据库失败: {e}, {traceback.format_exc()}")
             return 0
     
-    async def batch_update_daily_data(self, stock_codes: List[str]) -> Dict[str, Any]:
-        """批量更新多只股票的日线数据"""
-        try:
-            logger.info(f"开始批量更新{len(stock_codes)}只股票的日线数据")
+    async def _batch_update_daily_data(self, stock_codes: List[str], batch_size: int = 20) -> Dict[str, Any]:
+        """
+        批量更新日线数据
+        
+        Args:
+            stock_codes: 股票代码列表
+            batch_size: 批量大小
             
-            results = {
-                'success_count': 0,
-                'failed_count': 0,
-                'total_records': 0,
-                'failed_stocks': [],
-                'success_stocks': []
-            }
+        Returns:
+            Dict: 更新结果统计
+        """
+        success_count = 0
+        failed_count = 0
+        failed_stocks = []
+        
+        for i in range(0, len(stock_codes), batch_size):
+            batch = stock_codes[i:i + batch_size]
             
-            for stock_code in stock_codes:
+            for stock_code in batch:
                 try:
-                    df = await self.get_stock_daily_data(stock_code)
-                    if not df.empty:
-                        results['success_count'] += 1
-                        results['total_records'] += len(df)
-                        results['success_stocks'].append(stock_code)
-                        logger.info(f"成功更新{stock_code}，共{len(df)}条记录")
+                    result = await self.get_stock_daily_data(stock_code, save_to_db=True)
+                    if result is not None and not result.empty:
+                        success_count += 1
+                        logger.info(f"成功更新 {stock_code} 日线数据")
                     else:
-                        results['failed_count'] += 1
-                        results['failed_stocks'].append(stock_code)
-                        logger.warning(f"更新{stock_code}失败，未获取到数据")
+                        failed_count += 1
+                        failed_stocks.append(stock_code)
+                        logger.warning(f"更新 {stock_code} 日线数据失败：无数据")
+                except Exception as e:
+                    failed_count += 1
+                    failed_stocks.append(stock_code)
+                    logger.error(f"更新 {stock_code} 日线数据失败: {e}")
+            
+            # 批次间延迟
+            await asyncio.sleep(0.2)
+        
+        return {
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "failed_stocks": failed_stocks,
+            "total_processed": len(stock_codes)
+        }
+    
+    async def batch_update_daily_data(self, stock_codes: List[str], batch_size: int = 30, 
+                                    delay_seconds: float = 0.2, force_update: bool = False) -> Dict[str, Any]:
+        """
+        公开的批量更新日线数据接口
+        
+        Args:
+            stock_codes: 股票代码列表
+            batch_size: 批量大小
+            delay_seconds: 批次间延迟秒数
+            force_update: 是否强制更新
+            
+        Returns:
+            Dict: 更新结果统计
+        """
+        success_count = 0
+        failed_count = 0
+        failed_stocks = []
+        processed_stocks = []
+        
+        logger.info(f"开始批量更新{len(stock_codes)}只股票的日线数据")
+        
+        for i in range(0, len(stock_codes), batch_size):
+            batch = stock_codes[i:i + batch_size]
+            
+            for stock_code in batch:
+                try:
+                    # 如果不是强制更新，先检查是否需要更新
+                    if not force_update:
+                        latest_date = self._get_latest_date_from_db(stock_code)
+                        if latest_date:
+                            # 如果最新数据是今天或昨天（考虑周末），可能不需要更新
+                            from datetime import datetime, timedelta
+                            today = datetime.now().date()
+                            if isinstance(latest_date, str):
+                                latest_date = datetime.strptime(latest_date, '%Y-%m-%d').date()
+                            elif isinstance(latest_date, datetime):
+                                latest_date = latest_date.date()
+                            
+                            if latest_date >= today - timedelta(days=3):
+                                logger.debug(f"{stock_code} 数据较新，跳过更新")
+                                continue
+                    
+                    result = await self.get_stock_daily_data(stock_code, save_to_db=True)
+                    if result is not None and not result.empty:
+                        success_count += 1
+                        processed_stocks.append(stock_code)
+                        logger.debug(f"成功更新 {stock_code} 日线数据，共{len(result)}条记录")
+                    else:
+                        failed_count += 1
+                        failed_stocks.append(stock_code)
+                        logger.warning(f"更新 {stock_code} 日线数据失败：无数据")
                         
                 except Exception as e:
-                    results['failed_count'] += 1
-                    results['failed_stocks'].append(stock_code)
-                    logger.error(f"更新{stock_code}失败: {e}, {traceback.format_exc()}")
-                    
-                # 添加延迟，避免请求过于频繁
-                await asyncio.sleep(0.1)
+                    failed_count += 1
+                    failed_stocks.append(stock_code)
+                    logger.error(f"更新 {stock_code} 日线数据失败: {e}")
             
-            logger.info(f"批量更新完成：成功{results['success_count']}只，失败{results['failed_count']}只，总计{results['total_records']}条记录")
-            return results
-            
-        except Exception as e:
-            logger.error(f"批量更新日线数据失败: {e}, {traceback.format_exc()}")
-            return {
-                'success_count': 0,
-                'failed_count': len(stock_codes),
-                'total_records': 0,
-                'failed_stocks': stock_codes,
-                'success_stocks': [],
-                'error': str(e)
-            }
+            # 批次间延迟
+            if i + batch_size < len(stock_codes) and delay_seconds > 0:
+                await asyncio.sleep(delay_seconds)
+        
+        result = {
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "failed_stocks": failed_stocks,
+            "processed_stocks": processed_stocks,
+            "total_requested": len(stock_codes),
+            "total_processed": success_count + failed_count,
+            "success_rate": round(success_count / len(stock_codes) * 100, 2) if stock_codes else 0
+        }
+        
+        logger.info(f"批量更新完成：成功{success_count}只，失败{failed_count}只，成功率{result['success_rate']}%")
+        return result
     
     async def save_stock_data(self, stock_data: Dict[str, Any]):
         """保存股票数据到数据库"""
@@ -553,6 +631,161 @@ class DataService:
                 
         except Exception as e:
             logger.error(f"保存股票数据失败: {e}, {traceback.format_exc()}")
+    
+    async def analyze_data_completeness(self) -> Dict[str, Any]:
+        """分析数据完整度
+        
+        Returns:
+            包含完整度分析结果的字典
+        """
+        try:
+            logger.info("开始分析数据完整度")
+            
+            # 获取所有股票列表
+            all_stocks = await self.get_stock_list()
+            if not all_stocks:
+                return {}
+            
+            total_stocks = len(all_stocks)
+            stock_codes = [stock["stock_code"] for stock in all_stocks]
+            
+            # 分析每只股票的数据完整度
+            incomplete_stocks = []
+            complete_stocks = []
+            total_expected_days = 0
+            total_actual_days = 0
+            
+            # 计算预期的交易日数量（最近3年）
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=1095)  # 3年
+            expected_trading_days = self._calculate_trading_days(start_date, end_date)
+            
+            for stock_code in stock_codes:
+                try:
+                    # 获取该股票的数据统计
+                    stats_sql = """
+                    SELECT 
+                        COUNT(*) as record_count,
+                        MIN(trade_date) as earliest_date,
+                        MAX(trade_date) as latest_date
+                    FROM daily_stock_data 
+                    WHERE stock_code = ?
+                    """
+                    
+                    result = self.duckdb.fetchone(stats_sql, (stock_code,))
+                    
+                    if result and result[0] > 0:
+                        record_count, earliest_date, latest_date = result
+                        
+                        # 计算数据完整度
+                        actual_days = record_count
+                        completeness = min(actual_days / expected_trading_days * 100, 100)
+                        
+                        # 计算距离最新交易日的天数
+                        if latest_date:
+                            days_behind = (datetime.now().date() - latest_date).days
+                        else:
+                            days_behind = 999
+                        
+                        stock_analysis = {
+                            "stock_code": stock_code,
+                            "record_count": actual_days,
+                            "expected_days": expected_trading_days,
+                            "completeness": round(completeness, 2),
+                            "earliest_date": str(earliest_date) if earliest_date else None,
+                            "latest_date": str(latest_date) if latest_date else None,
+                            "days_behind": days_behind,
+                            "missing_days": max(expected_trading_days - actual_days, 0)
+                        }
+                        
+                        if completeness < 90 or days_behind > 5:
+                            incomplete_stocks.append(stock_analysis)
+                        else:
+                            complete_stocks.append(stock_analysis)
+                        
+                        total_actual_days += actual_days
+                    else:
+                        # 没有数据的股票
+                        stock_analysis = {
+                            "stock_code": stock_code,
+                            "record_count": 0,
+                            "expected_days": expected_trading_days,
+                            "completeness": 0.0,
+                            "earliest_date": None,
+                            "latest_date": None,
+                            "days_behind": 999,
+                            "missing_days": expected_trading_days
+                        }
+                        incomplete_stocks.append(stock_analysis)
+                    
+                    total_expected_days += expected_trading_days
+                    
+                except Exception as e:
+                    logger.warning(f"分析{stock_code}数据完整度失败: {e}")
+                    continue
+            
+            # 计算总体完整度
+            overall_completeness = (total_actual_days / total_expected_days * 100) if total_expected_days > 0 else 0
+            
+            # 按完整度排序
+            incomplete_stocks.sort(key=lambda x: x['completeness'])
+            
+            analysis_result = {
+                "analysis_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "total_stocks": total_stocks,
+                "complete_stocks_count": len(complete_stocks),
+                "incomplete_stocks_count": len(incomplete_stocks),
+                "overall_completeness": round(overall_completeness, 2),
+                "expected_trading_days": expected_trading_days,
+                "total_expected_records": total_expected_days,
+                "total_actual_records": total_actual_days,
+                "missing_records": total_expected_days - total_actual_days,
+                "incomplete_stocks": incomplete_stocks[:100],  # 返回前100个需要补全的
+                "completeness_distribution": self._get_completeness_distribution(incomplete_stocks + complete_stocks)
+            }
+            
+            logger.info(f"数据完整度分析完成：总体完整度{overall_completeness:.1f}%，{len(incomplete_stocks)}只股票需要补全")
+            return analysis_result
+            
+        except Exception as e:
+            logger.error(f"分析数据完整度失败: {e}, {traceback.format_exc()}")
+            return {}
+    
+    def _calculate_trading_days(self, start_date: datetime, end_date: datetime) -> int:
+        """计算交易日数量（简化版本，实际应考虑节假日）"""
+        total_days = (end_date - start_date).days
+        # 简化计算：去除周末，约为总天数的5/7
+        # 实际应该使用交易日历
+        trading_days = int(total_days * 5 / 7 * 0.95)  # 0.95考虑节假日
+        return max(trading_days, 1)
+    
+    def _get_completeness_distribution(self, stocks_analysis: List[Dict]) -> Dict[str, int]:
+        """获取完整度分布统计"""
+        distribution = {
+            "0-20%": 0,
+            "20-40%": 0,
+            "40-60%": 0,
+            "60-80%": 0,
+            "80-90%": 0,
+            "90-100%": 0
+        }
+        
+        for stock in stocks_analysis:
+            completeness = stock.get('completeness', 0)
+            if completeness < 20:
+                distribution["0-20%"] += 1
+            elif completeness < 40:
+                distribution["20-40%"] += 1
+            elif completeness < 60:
+                distribution["40-60%"] += 1
+            elif completeness < 80:
+                distribution["60-80%"] += 1
+            elif completeness < 90:
+                distribution["80-90%"] += 1
+            else:
+                distribution["90-100%"] += 1
+        
+        return distribution
     
     async def _update_realtime_data(self):
         """更新实时数据"""
@@ -635,6 +868,18 @@ class DataService:
         
         await self.redis_client.set("watched_stocks", default_stocks, expire=3600)
         return default_stocks
+    
+    def _get_latest_date_from_db(self, stock_code: str) -> str:
+        """获取数据库中指定股票的最新日期"""
+        try:
+            sql = "SELECT MAX(trade_date) FROM daily_stock_data WHERE stock_code = ?"
+            result = self.duckdb.fetchone(sql, (stock_code,))
+            if result and result[0]:
+                return str(result[0])
+            return None
+        except Exception as e:
+            logger.warning(f"获取{stock_code}最新日期失败: {e}")
+            return None
     
     async def _get_stocks_need_update(self) -> List[str]:
         """获取需要更新的股票列表"""

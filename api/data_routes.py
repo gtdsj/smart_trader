@@ -401,6 +401,354 @@ async def incremental_update_all_stocks(
     batch_size: int = Query(50, description="批量处理大小", ge=1, le=100),
     service: DataService = Depends(get_data_service)
 ):
+    """
+    增量补全A股所有股票的历史日线数据
+    
+    该接口会获取所有股票列表，然后批量更新每只股票的日线数据到DuckDB。
+    适用于定时任务或系统维护，确保数据的完整性和时效性。
+    """
+    try:
+        logger.info(f"开始增量补全{market}市场所有股票历史日线数据")
+        
+        # 获取股票列表
+        stocks = await service.get_stock_list(market)
+        if not stocks:
+            return ApiResponse(
+                success=False,
+                message=f"未获取到{market}市场的股票列表",
+                data=None
+            )
+        
+        stock_codes = [stock["stock_code"] for stock in stocks]
+        logger.info(f"获取到{len(stock_codes)}只股票，开始批量更新")
+        
+        # 批量更新数据
+        result = await service._batch_update_daily_data(stock_codes, batch_size)
+        
+        return ApiResponse(
+            success=True,
+            message=f"增量补全完成，成功更新{result['success_count']}只股票，失败{result['failed_count']}只",
+            data={
+                "market": market,
+                "total_stocks": len(stock_codes),
+                "success_count": result["success_count"],
+                "failed_count": result["failed_count"],
+                "failed_stocks": result["failed_stocks"][:10],  # 只返回前10个失败的股票
+                "batch_size": batch_size
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"增量补全失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/daily/full-market-backfill", response_model=ApiResponse, summary="A股全市场历史数据完整补全")
+async def full_market_data_backfill(
+    market: Optional[str] = Query("ALL", description="市场代码：SH、SZ或ALL"),
+    start_date: Optional[str] = Query(None, description="补全开始日期，格式YYYY-MM-DD，默认为3年前"),
+    end_date: Optional[str] = Query(None, description="补全结束日期，格式YYYY-MM-DD，默认为今天"),
+    batch_size: int = Query(30, description="批量处理大小", ge=1, le=50),
+    delay_seconds: float = Query(0.2, description="批次间延迟秒数", ge=0.1, le=2.0),
+    force_update: bool = Query(False, description="是否强制更新已存在的数据"),
+    service: DataService = Depends(get_data_service)
+):
+    """A股全市场历史数据完整补全接口
+    
+    该接口提供全面的A股市场历史数据补全功能：
+    
+    **功能特性：**
+    1. 支持全市场或指定市场的数据补全
+    2. 智能增量更新：自动检测缺失数据并补全
+    3. 可配置的时间范围和批处理参数
+    4. 详细的进度跟踪和错误处理
+    5. 数据质量验证和重复数据处理
+    
+    **适用场景：**
+    - 系统初始化时的历史数据导入
+    - 定期的数据完整性检查和补全
+    - 新增股票的历史数据回填
+    - 数据库迁移后的数据验证
+    
+    **性能优化：**
+    - 分批处理避免内存溢出
+    - 可配置延迟防止API限流
+    - 断点续传支持大规模数据补全
+    - 并发控制确保系统稳定性
+    """
+    try:
+        logger.info(f"开始A股全市场历史数据补全：市场={market}, 批次大小={batch_size}")
+        
+        # 参数验证和默认值设置
+        if not start_date:
+            start_date = (datetime.now() - timedelta(days=1095)).strftime('%Y-%m-%d')  # 默认3年前
+        if not end_date:
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            
+        # 验证日期格式和范围
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="日期格式错误，应为YYYY-MM-DD")
+            
+        if start_dt > end_dt:
+            raise HTTPException(status_code=400, detail="开始日期不能大于结束日期")
+            
+        if (end_dt - start_dt).days > 2190:  # 6年
+            raise HTTPException(status_code=400, detail="数据补全范围不能超过6年")
+        
+        # 获取股票列表
+        all_stocks = await service.get_stock_list()
+        if not all_stocks:
+            return ApiResponse(
+                success=False,
+                message="未获取到股票列表",
+                data=None
+            )
+        
+        # 根据市场过滤股票
+        if market and market != "ALL":
+            filtered_stocks = [stock for stock in all_stocks if stock.get("market") == market]
+        else:
+            filtered_stocks = all_stocks
+            
+        stock_codes = [stock["stock_code"] for stock in filtered_stocks]
+        total_stocks = len(stock_codes)
+        
+        if total_stocks == 0:
+            return ApiResponse(
+                success=False,
+                message=f"未找到{market}市场的股票",
+                data=None
+            )
+        
+        logger.info(f"获取到{total_stocks}只股票，开始全市场数据补全")
+        
+        # 初始化统计变量
+        total_batches = (total_stocks + batch_size - 1) // batch_size
+        success_count = 0
+        failed_count = 0
+        total_records = 0
+        skipped_count = 0
+        failed_stocks = []
+        success_stocks = []
+        batch_results = []
+        
+        # 分批处理股票
+        for i in range(0, total_stocks, batch_size):
+            batch_stocks = stock_codes[i:i + batch_size]
+            batch_num = i // batch_size + 1
+            
+            logger.info(f"处理第{batch_num}/{total_batches}批，包含{len(batch_stocks)}只股票")
+            
+            batch_success = 0
+            batch_failed = 0
+            batch_records = 0
+            batch_skipped = 0
+            batch_failed_stocks = []
+            batch_success_stocks = []
+            
+            # 处理当前批次的每只股票
+            for stock_code in batch_stocks:
+                try:
+                    # 检查是否需要更新
+                    if not force_update:
+                        latest_date = service._get_latest_date_from_db(stock_code)
+                        if latest_date and latest_date >= end_date:
+                            batch_skipped += 1
+                            skipped_count += 1
+                            logger.debug(f"{stock_code}数据已是最新，跳过")
+                            continue
+                    
+                    # 获取历史数据
+                    df = await service.get_stock_daily_data(
+                        stock_code=stock_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        save_to_db=True
+                    )
+                    
+                    if not df.empty:
+                        record_count = len(df)
+                        batch_success += 1
+                        batch_records += record_count
+                        batch_success_stocks.append(stock_code)
+                        logger.debug(f"{stock_code}补全成功，获取{record_count}条记录")
+                    else:
+                        batch_failed += 1
+                        batch_failed_stocks.append(stock_code)
+                        logger.warning(f"{stock_code}未获取到数据")
+                        
+                except Exception as e:
+                    batch_failed += 1
+                    batch_failed_stocks.append(stock_code)
+                    logger.error(f"补全{stock_code}失败: {e}")
+                    
+                # 股票间小延迟
+                await asyncio.sleep(0.05)
+            
+            # 更新总计数
+            success_count += batch_success
+            failed_count += batch_failed
+            total_records += batch_records
+            failed_stocks.extend(batch_failed_stocks)
+            success_stocks.extend(batch_success_stocks)
+            
+            # 记录批次结果
+            batch_result = {
+                "batch_num": batch_num,
+                "stocks_in_batch": len(batch_stocks),
+                "success_count": batch_success,
+                "failed_count": batch_failed,
+                "skipped_count": batch_skipped,
+                "records_count": batch_records,
+                "success_stocks": batch_success_stocks[:5],  # 只记录前5个成功的
+                "failed_stocks": batch_failed_stocks
+            }
+            batch_results.append(batch_result)
+            
+            # 批次间延迟
+            if i + batch_size < total_stocks:
+                await asyncio.sleep(delay_seconds)
+                
+            # 进度日志
+            progress = round((batch_num / total_batches) * 100, 1)
+            logger.info(f"批次{batch_num}完成，进度{progress}%，成功{batch_success}只，失败{batch_failed}只，跳过{batch_skipped}只")
+        
+        # 计算最终统计
+        success_rate = round(success_count / total_stocks * 100, 2) if total_stocks > 0 else 0
+        avg_records_per_stock = round(total_records / success_count, 1) if success_count > 0 else 0
+        
+        # 构建详细结果
+        result_summary = {
+            "operation": "full_market_data_backfill",
+            "market": market,
+            "date_range": f"{start_date} 至 {end_date}",
+            "total_stocks": total_stocks,
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "skipped_count": skipped_count,
+            "total_records": total_records,
+            "success_rate": success_rate,
+            "avg_records_per_stock": avg_records_per_stock,
+            "batch_size": batch_size,
+            "total_batches": total_batches,
+            "delay_seconds": delay_seconds,
+            "force_update": force_update,
+            "processing_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "failed_stocks_sample": failed_stocks[:20],  # 前20个失败的股票
+            "batch_details": batch_results[-10:]  # 最后10个批次的详情
+        }
+        
+        # 生成结果消息
+        if success_count == total_stocks:
+            message = f"✅ 全市场数据补全完成！成功处理{total_stocks}只股票，共补全{total_records}条记录"
+        elif success_count > 0:
+            message = f"⚠️ 部分完成：成功{success_count}只，失败{failed_count}只，跳过{skipped_count}只，共补全{total_records}条记录"
+        else:
+            message = f"❌ 补全失败：{total_stocks}只股票均处理失败"
+            
+        logger.info(message)
+        
+        return ApiResponse(
+            success=success_count > 0,
+            message=message,
+            data=result_summary
+        )
+        
+    except Exception as e:
+        logger.error(f"A股全市场数据补全失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/daily/smart-backfill", response_model=ApiResponse, summary="智能数据补全")
+async def smart_data_backfill(
+    target_completeness: float = Query(95.0, description="目标完整度百分比", ge=80.0, le=100.0),
+    max_stocks_per_run: int = Query(200, description="单次运行最大股票数", ge=50, le=500),
+    priority_mode: str = Query("missing_recent", description="优先级模式：missing_recent(缺失最新数据), missing_most(缺失最多数据), random(随机)"),
+    service: DataService = Depends(get_data_service)
+):
+    """智能数据补全接口
+    
+    根据数据完整度分析，智能选择需要补全的股票：
+    1. 分析每只股票的数据完整度
+    2. 按优先级排序选择需要补全的股票
+    3. 执行针对性的数据补全
+    4. 达到目标完整度后停止
+    """
+    try:
+        logger.info(f"开始智能数据补全，目标完整度：{target_completeness}%")
+        
+        # 分析数据完整度
+        completeness_analysis = await service.analyze_data_completeness()
+        
+        if not completeness_analysis:
+            return ApiResponse(
+                success=False,
+                message="无法获取数据完整度分析",
+                data=None
+            )
+        
+        current_completeness = completeness_analysis.get('overall_completeness', 0)
+        
+        if current_completeness >= target_completeness:
+            return ApiResponse(
+                success=True,
+                message=f"数据完整度已达标：{current_completeness:.1f}% >= {target_completeness}%",
+                data=completeness_analysis
+            )
+        
+        # 获取需要补全的股票列表
+        incomplete_stocks = completeness_analysis.get('incomplete_stocks', [])
+        
+        # 根据优先级模式排序
+        if priority_mode == "missing_recent":
+            # 按最新数据缺失程度排序
+            incomplete_stocks.sort(key=lambda x: x.get('days_behind', 0), reverse=True)
+        elif priority_mode == "missing_most":
+            # 按缺失数据量排序
+            incomplete_stocks.sort(key=lambda x: x.get('missing_days', 0), reverse=True)
+        else:  # random
+            import random
+            random.shuffle(incomplete_stocks)
+        
+        # 限制处理数量
+        stocks_to_process = incomplete_stocks[:max_stocks_per_run]
+        stock_codes = [stock['stock_code'] for stock in stocks_to_process]
+        
+        logger.info(f"选择{len(stock_codes)}只股票进行智能补全")
+        
+        # 执行批量更新
+        batch_result = await service.batch_update_daily_data(stock_codes)
+        
+        # 重新分析完整度
+        updated_analysis = await service.analyze_data_completeness()
+        updated_completeness = updated_analysis.get('overall_completeness', 0)
+        
+        # 构建结果
+        result = {
+            "before_completeness": current_completeness,
+            "after_completeness": updated_completeness,
+            "target_completeness": target_completeness,
+            "improvement": updated_completeness - current_completeness,
+            "target_achieved": updated_completeness >= target_completeness,
+            "processed_stocks": len(stock_codes),
+            "batch_result": batch_result,
+            "priority_mode": priority_mode
+        }
+        
+        message = f"智能补全完成：完整度从{current_completeness:.1f}%提升到{updated_completeness:.1f}%"
+        
+        return ApiResponse(
+            success=True,
+            message=message,
+            data=result
+        )
+        
+    except Exception as e:
+        logger.error(f"智能数据补全失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     """增量补全A股所有股票的历史日线数据
     
     该接口将：

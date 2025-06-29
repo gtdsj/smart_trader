@@ -13,6 +13,7 @@ from config import get_settings, SystemConfig
 from core.database import init_database
 from core.redis_client import init_redis
 from api.data_routes import router as data_router, set_data_service
+from api.data_backfill_routes import router as data_backfill_router
 from api.trading_routes import router as trading_router, set_trading_service
 from api.strategy_manager_routes import (
     router as strategy_manager_router,
@@ -125,6 +126,7 @@ def create_app() -> FastAPI:
     
     # 注册路由
     app.include_router(data_router)
+    app.include_router(data_backfill_router)
     app.include_router(trading_router)
     app.include_router(strategy_manager_router)
     app.include_router(strategy_router)
