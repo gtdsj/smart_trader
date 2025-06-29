@@ -462,9 +462,7 @@ class XtQuantService:
                                             return pd.NaT
                                     
                                     # 转换索引为时间格式
-                                    logger.info(f"转换前索引数据: {df.index}")
                                     df.index = df.index.map(convert_mixed_time)
-                                    logger.info(f"转换后索引数据: {df.index}")
                                     # 删除无效的时间数据
                                     df = df[df.index.notna()]
                                     

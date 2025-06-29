@@ -294,9 +294,9 @@ class DataService:
                     start_date = (latest_date + timedelta(days=1)).strftime('%Y-%m-%d')
                     logger.info(f"{stock_code}数据库中最新日期: {latest_date}, 从{start_date}开始增量更新")
                 else:
-                    # 如果数据库中没有数据，获取最近3年的数据
-                    start_date = (datetime.now() - timedelta(days=1095)).strftime('%Y-%m-%d')
-                    logger.info(f"{stock_code}数据库中无数据，从{start_date}开始获取历史数据")
+                    # 如果数据库中没有数据，从XtQuant获取全部数据
+                    start_date = '1990-01-01'
+                    logger.info(f"{stock_code}数据库中没有数据，从{start_date}开始获取全部数据")
             
             # 检查日期范围
             if start_date >= end_date:
