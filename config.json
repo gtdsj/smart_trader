@@ -3,22 +3,25 @@
   "version": "2.0.0",
   "debug": false,
   "log_level": "INFO",
+  "log_dir": "D:\\smart_trader\\logs",
+  "log_file_prefix": "smart_trader",
+  "max_log_files": 30,
   "api_host": "0.0.0.0",
-  "api_port": 8888,
+  "api_port": 8000,
   "database": {
     "type": "duckdb",
     "path": "data/smart_trader.db",
     "memory": false
   },
   "xtquant": {
-    "path": "D:\\迅投极速交易终端 睿智融科版\\userdata_mini",
+    "path": "D:\\江海证券QMT实盘_交易\\userdata_mini",
     "session_id": 123456,
     "account_id": "85110106",
     "account_type": "STOCK"
   },
   "dingtalk": {
-    "webhook_url": "",
-    "secret": null,
+    "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=df410340f9f2355c3f0794e416533e84634da730455927cc96c55bfc6bd0879d",
+    "secret": "SECfc8f795fe1a288d11ed521b1a29c5d22221e09176b99379ff74d0298be19ea1a",
     "enabled": false
   },
   "trading": {

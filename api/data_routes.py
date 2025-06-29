@@ -5,6 +5,7 @@
 
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from loguru import logger
@@ -391,6 +392,215 @@ async def batch_get_daily_data(
         
     except Exception as e:
         logger.error(f"批量获取日线数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/daily/incremental-update-all", response_model=ApiResponse, summary="增量补全A股所有股票历史日线数据")
+async def incremental_update_all_stocks(
+    market: Optional[str] = Query("ALL", description="市场代码：SH、SZ或ALL"),
+    batch_size: int = Query(50, description="批量处理大小", ge=1, le=100),
+    service: DataService = Depends(get_data_service)
+):
+    """增量补全A股所有股票的历史日线数据
+    
+    该接口将：
+    1. 获取指定市场的所有股票列表
+    2. 分批次进行增量更新（从数据库最新日期开始补全到今天）
+    3. 返回详细的更新统计信息
+    
+    适用于定时任务或系统初始化时的数据补全
+    """
+    try:
+        logger.info(f"开始增量补全{market}市场所有股票的历史日线数据")
+        
+        # 获取股票列表
+        all_stocks = await service.get_stock_list(market)
+        if not all_stocks:
+            return ApiResponse(
+                success=False,
+                message="未获取到股票列表",
+                data=None
+            )
+        
+        stock_codes = [stock["stock_code"] for stock in all_stocks]
+        total_stocks = len(stock_codes)
+        
+        logger.info(f"获取到{total_stocks}只股票，开始分批增量更新")
+        
+        # 分批处理
+        batch_results = []
+        success_count = 0
+        failed_count = 0
+        total_records = 0
+        failed_stocks = []
+        success_stocks = []
+        
+        for i in range(0, total_stocks, batch_size):
+            batch_stocks = stock_codes[i:i + batch_size]
+            batch_num = i // batch_size + 1
+            total_batches = (total_stocks + batch_size - 1) // batch_size
+            
+            logger.info(f"处理第{batch_num}/{total_batches}批，包含{len(batch_stocks)}只股票")
+            
+            # 批量更新当前批次
+            batch_result = await service.batch_update_daily_data(batch_stocks)
+            batch_results.append({
+                "batch_num": batch_num,
+                "stocks_in_batch": len(batch_stocks),
+                "result": batch_result
+            })
+            
+            # 累计统计
+            success_count += batch_result.get('success_count', 0)
+            failed_count += batch_result.get('failed_count', 0)
+            total_records += batch_result.get('total_records', 0)
+            failed_stocks.extend(batch_result.get('failed_stocks', []))
+            success_stocks.extend(batch_result.get('success_stocks', []))
+            
+            # 批次间延迟，避免过载
+            if i + batch_size < total_stocks:
+                await asyncio.sleep(1)
+        
+        # 汇总结果
+        summary = {
+            "market": market,
+            "total_stocks": total_stocks,
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "total_records": total_records,
+            "success_rate": round(success_count / total_stocks * 100, 2) if total_stocks > 0 else 0,
+            "batch_size": batch_size,
+            "total_batches": len(batch_results),
+            "failed_stocks": failed_stocks[:10],  # 只返回前10个失败的股票
+            "batch_details": batch_results
+        }
+        
+        message = f"增量更新完成：处理{total_stocks}只股票，成功{success_count}只，失败{failed_count}只，共更新{total_records}条记录"
+        logger.info(message)
+        
+        return ApiResponse(
+            success=True,
+            message=message,
+            data=summary
+        )
+        
+    except Exception as e:
+        logger.error(f"增量补全A股历史数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/daily/statistics", response_model=ApiResponse, summary="获取数据库日线数据统计信息")
+async def get_daily_data_statistics(
+    service: DataService = Depends(get_data_service)
+):
+    """获取数据库中日线数据的统计信息
+    
+    返回：
+    - 总股票数量
+    - 总记录数量
+    - 数据日期范围
+    - 各股票最新数据日期
+    - 需要更新的股票列表
+    """
+    try:
+        # 获取统计信息
+        stats_sql = """
+        SELECT 
+            COUNT(DISTINCT stock_code) as total_stocks,
+            COUNT(*) as total_records,
+            MIN(trade_date) as earliest_date,
+            MAX(trade_date) as latest_date
+        FROM daily_stock_data
+        """
+        
+        stats_result = service.duckdb.fetchone(stats_sql)
+        
+        if not stats_result or stats_result[0] == 0:
+            return ApiResponse(
+                success=True,
+                message="数据库中暂无日线数据",
+                data={
+                    "total_stocks": 0,
+                    "total_records": 0,
+                    "earliest_date": None,
+                    "latest_date": None,
+                    "stocks_need_update": [],
+                    "latest_data_by_stock": []
+                }
+            )
+        
+        total_stocks, total_records, earliest_date, latest_date = stats_result
+        
+        # 获取各股票最新数据日期
+        latest_by_stock_sql = """
+        SELECT 
+            stock_code,
+            MAX(trade_date) as latest_date,
+            COUNT(*) as record_count
+        FROM daily_stock_data 
+        GROUP BY stock_code 
+        ORDER BY latest_date DESC
+        LIMIT 20
+        """
+        
+        latest_by_stock = service.duckdb.fetchall(latest_by_stock_sql)
+        
+        # 查找需要更新的股票（最新数据超过3天的）
+        today = datetime.now().strftime('%Y-%m-%d')
+        outdated_sql = """
+        SELECT 
+            stock_code,
+            MAX(trade_date) as latest_date,
+            DATEDIFF('day', MAX(trade_date), CURRENT_DATE) as days_behind
+        FROM daily_stock_data 
+        GROUP BY stock_code 
+        HAVING DATEDIFF('day', MAX(trade_date), CURRENT_DATE) > 3
+        ORDER BY days_behind DESC
+        LIMIT 50
+        """
+        
+        outdated_stocks = service.duckdb.fetchall(outdated_sql)
+        
+        # 格式化结果
+        latest_data_by_stock = [
+            {
+                "stock_code": row[0],
+                "latest_date": str(row[1]),
+                "record_count": row[2]
+            }
+            for row in latest_by_stock
+        ]
+        
+        stocks_need_update = [
+            {
+                "stock_code": row[0],
+                "latest_date": str(row[1]),
+                "days_behind": row[2]
+            }
+            for row in outdated_stocks
+        ]
+        
+        statistics = {
+            "total_stocks": total_stocks,
+            "total_records": total_records,
+            "earliest_date": str(earliest_date) if earliest_date else None,
+            "latest_date": str(latest_date) if latest_date else None,
+            "data_span_days": (datetime.strptime(str(latest_date), '%Y-%m-%d') - 
+                              datetime.strptime(str(earliest_date), '%Y-%m-%d')).days if earliest_date and latest_date else 0,
+            "stocks_need_update_count": len(stocks_need_update),
+            "stocks_need_update": stocks_need_update,
+            "latest_data_by_stock": latest_data_by_stock,
+            "query_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+        return ApiResponse(
+            success=True,
+            message=f"数据库统计信息：{total_stocks}只股票，{total_records}条记录",
+            data=statistics
+        )
+        
+    except Exception as e:
+        logger.error(f"获取数据库统计信息失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

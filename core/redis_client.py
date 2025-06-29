@@ -20,11 +20,20 @@ class RedisClient:
     async def connect(self):
         """连接Redis"""
         settings = get_settings()
-        self.redis = await aioredis.from_url(settings.redis.url, decode_responses=True)
-        
-        # 测试连接
-        await self.redis.ping()
-        logger.info("Redis连接成功")
+        try:
+            # 尝试新版本aioredis的连接方式
+            if hasattr(aioredis, 'from_url'):
+                self.redis = await aioredis.from_url(settings.redis.url, decode_responses=True)
+            else:
+                # 兼容旧版本aioredis
+                self.redis = aioredis.Redis.from_url(settings.redis.url, decode_responses=True)
+            
+            # 测试连接
+            await self.redis.ping()
+            logger.info("Redis连接成功")
+        except Exception as e:
+            logger.warning(f"Redis连接失败: {e}，将使用本地缓存")
+            self.redis = None
     
     async def disconnect(self):
         """断开Redis连接"""

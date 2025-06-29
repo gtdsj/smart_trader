@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field, validator
 from loguru import logger
 
-from config import Settings, get_settings
+from config import SystemConfig, get_settings
 
 # 创建路由器
 router = APIRouter(prefix="/api/v1/config", tags=["配置服务"])
@@ -176,7 +176,7 @@ def is_sensitive_config(section: str, key: str) -> bool:
 
 # API路由
 @router.get("/all", response_model=ApiResponse, summary="获取所有配置")
-async def get_all_configs(settings: Settings = Depends(get_settings)):
+async def get_all_configs(settings: SystemConfig = Depends(get_settings)):
     """获取所有配置信息"""
     try:
         configs = []
@@ -307,7 +307,7 @@ async def get_all_configs(settings: Settings = Depends(get_settings)):
 @router.get("/section/{section}", response_model=ApiResponse, summary="获取指定节配置")
 async def get_section_config(
     section: str,
-    settings: Settings = Depends(get_settings)
+    settings: SystemConfig = Depends(get_settings)
 ):
     """获取指定节的配置"""
     try:
@@ -378,7 +378,7 @@ async def get_section_config(
 @router.post("/database", response_model=ApiResponse, summary="更新数据库配置")
 async def update_database_config(
     request: DatabaseConfigRequest,
-    settings: Settings = Depends(get_settings)
+    settings: SystemConfig = Depends(get_settings)
 ):
     """更新数据库配置"""
     try:
@@ -419,7 +419,7 @@ async def update_database_config(
 @router.post("/redis", response_model=ApiResponse, summary="更新Redis配置")
 async def update_redis_config(
     request: RedisConfigRequest,
-    settings: Settings = Depends(get_settings)
+    settings: SystemConfig = Depends(get_settings)
 ):
     """更新Redis配置"""
     try:
@@ -455,7 +455,7 @@ async def update_redis_config(
 @router.post("/xtquant", response_model=ApiResponse, summary="更新XtQuant配置")
 async def update_xtquant_config(
     request: XtQuantConfigRequest,
-    settings: Settings = Depends(get_settings)
+    settings: SystemConfig = Depends(get_settings)
 ):
     """更新XtQuant配置"""
     try:
@@ -491,7 +491,7 @@ async def update_xtquant_config(
 @router.post("/dingtalk", response_model=ApiResponse, summary="更新钉钉配置")
 async def update_dingtalk_config(
     request: DingTalkConfigRequest,
-    settings: Settings = Depends(get_settings)
+    settings: SystemConfig = Depends(get_settings)
 ):
     """更新钉钉配置"""
     try:
@@ -523,7 +523,7 @@ async def update_dingtalk_config(
 @router.post("/trading", response_model=ApiResponse, summary="更新交易配置")
 async def update_trading_config(
     request: TradingConfigRequest,
-    settings: Settings = Depends(get_settings)
+    settings: SystemConfig = Depends(get_settings)
 ):
     """更新交易配置"""
     try:
@@ -571,7 +571,7 @@ async def update_trading_config(
 @router.post("/backtest", response_model=ApiResponse, summary="更新回测配置")
 async def update_backtest_config(
     request: BacktestConfigRequest,
-    settings: Settings = Depends(get_settings)
+    settings: SystemConfig = Depends(get_settings)
 ):
     """更新回测配置"""
     try:
@@ -654,7 +654,7 @@ async def update_system_config(
 @router.post("/validate", response_model=ApiResponse, summary="验证配置")
 async def validate_config(
     section: str,
-    settings: Settings = Depends(get_settings)
+    settings: SystemConfig = Depends(get_settings)
 ):
     """验证指定节的配置是否有效"""
     try:
@@ -731,7 +731,7 @@ async def validate_config(
 @router.post("/reset/{section}", response_model=ApiResponse, summary="重置配置")
 async def reset_config(
     section: str,
-    settings: Settings = Depends(get_settings)
+    settings: SystemConfig = Depends(get_settings)
 ):
     """重置指定节的配置为默认值"""
     try:

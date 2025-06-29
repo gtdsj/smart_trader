@@ -93,10 +93,78 @@ class Strategy(Base):
     name = Column(String(100), unique=True, nullable=False, comment="策略名称")
     description = Column(Text, comment="策略描述")
     strategy_type = Column(String(50), comment="策略类型")
+    category = Column(String(50), comment="策略分类(stock_selection/trading/risk_management)")
     parameters = Column(JSON, comment="策略参数")
+    conditions = Column(JSON, comment="策略条件配置")
     is_active = Column(Boolean, default=False, comment="是否激活")
+    priority = Column(Integer, default=0, comment="优先级")
+    created_by = Column(String(100), comment="创建者")
+    version = Column(String(20), default="1.0", comment="版本号")
     created_at = Column(DateTime, default=datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+
+class StrategyCondition(Base):
+    """策略条件表"""
+    __tablename__ = "strategy_conditions"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    strategy_id = Column(Integer, ForeignKey('strategies.id'), nullable=False, comment="策略ID")
+    condition_type = Column(String(50), nullable=False, comment="条件类型(technical/fundamental/custom)")
+    indicator = Column(String(100), nullable=False, comment="指标名称")
+    operator = Column(String(20), nullable=False, comment="操作符(>,<,>=,<=,==,!=,between,in)")
+    value = Column(JSON, comment="条件值")
+    logic_operator = Column(String(10), default="AND", comment="逻辑操作符(AND/OR)")
+    order_index = Column(Integer, default=0, comment="条件顺序")
+    is_active = Column(Boolean, default=True, comment="是否启用")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    
+    # 关系
+    strategy = relationship("Strategy", backref="strategy_conditions")
+
+
+class StrategyExecution(Base):
+    """策略执行记录表"""
+    __tablename__ = "strategy_executions"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    strategy_id = Column(Integer, ForeignKey('strategies.id'), nullable=False, comment="策略ID")
+    execution_type = Column(String(50), nullable=False, comment="执行类型(scan/backtest/live)")
+    status = Column(String(20), nullable=False, comment="执行状态(running/completed/failed)")
+    start_time = Column(DateTime, nullable=False, comment="开始时间")
+    end_time = Column(DateTime, comment="结束时间")
+    total_stocks = Column(Integer, default=0, comment="扫描股票总数")
+    signal_count = Column(Integer, default=0, comment="信号数量")
+    success_rate = Column(Float, comment="成功率")
+    error_message = Column(Text, comment="错误信息")
+    result_data = Column(JSON, comment="执行结果数据")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    
+    # 关系
+    strategy = relationship("Strategy", backref="executions")
+
+
+class StrategySignal(Base):
+    """策略信号表"""
+    __tablename__ = "strategy_signals"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    strategy_id = Column(Integer, ForeignKey('strategies.id'), nullable=False, comment="策略ID")
+    execution_id = Column(Integer, ForeignKey('strategy_executions.id'), comment="执行记录ID")
+    stock_code = Column(String(20), nullable=False, index=True, comment="股票代码")
+    signal_type = Column(String(20), nullable=False, comment="信号类型(BUY/SELL/HOLD)")
+    signal_strength = Column(Float, comment="信号强度")
+    trigger_price = Column(Float, comment="触发价格")
+    target_price = Column(Float, comment="目标价格")
+    stop_loss_price = Column(Float, comment="止损价格")
+    reason = Column(Text, comment="信号原因")
+    confidence = Column(Float, comment="置信度")
+    is_processed = Column(Boolean, default=False, comment="是否已处理")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    
+    # 关系
+    strategy = relationship("Strategy", backref="signals")
+    execution = relationship("StrategyExecution", backref="signals")
 
 
 class BacktestResult(Base):

@@ -44,6 +44,7 @@ DingtalkChatbot==1.5.7
 
 # Configuration
 python-dotenv==1.0.0
+pytz==2023.3
 
 # Visualization
 plotly==5.17.0

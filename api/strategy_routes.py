@@ -291,6 +291,69 @@ async def _run_strategy_scan_background(
         logger.error(f"后台策略扫描失败: {e}")
 
 
+@router.post("/trend-selection", response_model=ApiResponse, summary="运行趋势选股策略")
+async def run_trend_selection_strategy(
+    stock_codes: Optional[List[str]] = None,
+    background_tasks: BackgroundTasks = None,
+    service: StrategyService = Depends(get_strategy_service)
+):
+    """运行趋势选股策略
+    
+    Args:
+        stock_codes: 可选的股票代码列表，如果不提供则扫描所有股票
+        background_tasks: 后台任务
+        service: 策略服务
+    
+    Returns:
+        包含趋势选股结果的响应
+    """
+    try:
+        # 如果提供了后台任务，则异步执行
+        if background_tasks:
+            background_tasks.add_task(
+                _run_trend_selection_background,
+                service,
+                stock_codes
+            )
+            return ApiResponse(
+                success=True,
+                message="趋势选股策略已启动",
+                data={"strategy_name": "trend_selection"}
+            )
+        else:
+            # 同步执行并返回结果
+            signals = await service.run_strategy_scan("trend_selection", stock_codes)
+            return ApiResponse(
+                success=True,
+                message=f"趋势选股完成，发现{len(signals)}个符合条件的股票",
+                data={
+                    "strategy_name": "trend_selection",
+                    "signals": signals,
+                    "count": len(signals)
+                }
+            )
+    
+    except Exception as e:
+        logger.error(f"运行趋势选股策略失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _run_trend_selection_background(
+    service: StrategyService,
+    stock_codes: Optional[List[str]]
+):
+    """后台运行趋势选股策略"""
+    try:
+        signals = await service.run_strategy_scan("trend_selection", stock_codes)
+        logger.info(f"趋势选股策略扫描完成，发现{len(signals)}个符合条件的股票")
+        
+        # 发送通知
+        if signals:
+            await service._send_strategy_signals_notification("趋势选股", signals)
+    except Exception as e:
+        logger.error(f"后台趋势选股策略扫描失败: {e}")
+
+
 @router.post("/run/all", response_model=ApiResponse, summary="运行所有激活策略")
 async def run_all_active_strategies(
     background_tasks: BackgroundTasks,

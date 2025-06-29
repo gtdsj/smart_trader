@@ -406,6 +406,7 @@ class XtQuantService:
                             period=xt_period,
                             count=count
                         )
+                    logger.info("获取到的原始数据: " + str(data))
                     if data and isinstance(data, dict):
                         # 根据API文档，返回格式为 { field1: DataFrame, field2: DataFrame, ... }
                         # DataFrame的index为stock_list，columns为time_list
@@ -461,7 +462,9 @@ class XtQuantService:
                                             return pd.NaT
                                     
                                     # 转换索引为时间格式
+                                    logger.info(f"转换前索引数据: {df.index}")
                                     df.index = df.index.map(convert_mixed_time)
+                                    logger.info(f"转换后索引数据: {df.index}")
                                     # 删除无效的时间数据
                                     df = df[df.index.notna()]
                                     

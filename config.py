@@ -32,7 +32,10 @@ class DatabaseConfig(BaseModel):
     
     @property
     def url(self) -> str:
-        return f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+        if self.memory:
+            return "sqlite:///:memory:"
+        else:
+            return f"sqlite:///{self.path}"
 
 
 class RedisConfig(BaseModel):

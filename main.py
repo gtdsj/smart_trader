@@ -14,6 +14,11 @@ from core.database import init_database
 from core.redis_client import init_redis
 from api.data_routes import router as data_router, set_data_service
 from api.trading_routes import router as trading_router, set_trading_service
+from api.strategy_manager_routes import (
+    router as strategy_manager_router,
+    set_strategy_manager,
+    set_strategy_executor
+)
 from api.strategy_routes import router as strategy_router, set_strategy_service
 from api.backtest_routes import router as backtest_router, set_backtest_service
 from api.notification_routes import router as notification_router, set_notification_service
@@ -23,6 +28,9 @@ from services.data_service import DataService
 from services.trading_service import TradingService
 from services.strategy_service import StrategyService
 from services.backtest_service import BacktestService
+from services.xtquant_service import XtQuantService
+from services.strategy_manager import StrategyManager
+from services.strategy_executor import StrategyExecutor
 
 
 @asynccontextmanager
@@ -34,7 +42,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"启动 {settings.app_name} v{settings.version}")
     
     # 初始化数据库
-    await init_database()
+    init_database()
     logger.info("数据库初始化完成")
     
     # 初始化Redis
@@ -42,20 +50,28 @@ async def lifespan(app: FastAPI):
     logger.info("Redis初始化完成")
     
     # 初始化服务
+    xtquant_service = XtQuantService()
     notification_service = NotificationService()
-    await notification_service.start()
     
-    trading_service = TradingService(notification_service)
-    await trading_service.start()
+    trading_service = TradingService()
     
     data_service = DataService()
     await data_service.start()
     
-    strategy_service = StrategyService(data_service, notification_service)
-    await strategy_service.start()
+    strategy_service = StrategyService()
+   # 初始化回测服务
+    backtest_service = BacktestService()
     
-    backtest_service = BacktestService(data_service, strategy_service, notification_service)
-    await backtest_service.start()
+    strategy_manager = StrategyManager()
+    strategy_executor = StrategyExecutor()
+    
+    # 设置服务依赖
+    strategy_executor.set_data_service(data_service)
+    strategy_executor.set_strategy_manager(strategy_manager)
+    
+    # 设置服务间依赖关系
+    backtest_service.set_data_service(data_service)
+    backtest_service.set_strategy_service(strategy_service)
     
     # 设置API路由的服务实例
     set_data_service(data_service)
@@ -63,6 +79,8 @@ async def lifespan(app: FastAPI):
     set_strategy_service(strategy_service)
     set_backtest_service(backtest_service)
     set_notification_service(notification_service)
+    set_strategy_manager(strategy_manager)
+    set_strategy_executor(strategy_executor)
     
     logger.info("所有服务启动完成")
     
@@ -108,6 +126,7 @@ def create_app() -> FastAPI:
     # 注册路由
     app.include_router(data_router)
     app.include_router(trading_router)
+    app.include_router(strategy_manager_router)
     app.include_router(strategy_router)
     app.include_router(backtest_router)
     app.include_router(notification_router)

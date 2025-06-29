@@ -39,15 +39,21 @@ class TimeUtils:
                     timestamp_int = int(timestamp_str)
                     return TimeUtils._convert_numeric_timestamp(timestamp_int)
                 else:
-                    # 尝试直接解析字符串
-                    return pd.to_datetime(timestamp_str)
+                    # 尝试直接解析字符串，如果包含时区信息则转换为本地时区
+                    parsed_dt = pd.to_datetime(timestamp_str)
+                    if parsed_dt.tz is not None:
+                        return parsed_dt.tz_convert('Asia/Shanghai').tz_localize(None)
+                    return parsed_dt
             
             # 如果是数字类型
             if isinstance(timestamp, (int, float)):
                 return TimeUtils._convert_numeric_timestamp(timestamp)
             
-            # 其他情况直接转换
-            return pd.to_datetime(timestamp)
+            # 其他情况直接转换，处理可能的时区问题
+            parsed_dt = pd.to_datetime(timestamp)
+            if hasattr(parsed_dt, 'tz') and parsed_dt.tz is not None:
+                return parsed_dt.tz_convert('Asia/Shanghai').tz_localize(None)
+            return parsed_dt
             
         except Exception as e:
             logger.warning(f"时间戳转换失败: {timestamp}, 错误: {e}")
@@ -71,14 +77,14 @@ class TimeUtils:
             # YYYYMMDD格式
             return pd.to_datetime(timestamp_str, format='%Y%m%d')
         elif len(timestamp_str) == 10:
-            # 秒时间戳
-            return pd.to_datetime(timestamp, unit='s')
+            # 秒时间戳，转换为本地时区
+            return pd.to_datetime(timestamp, unit='s', utc=True).tz_convert('Asia/Shanghai').tz_localize(None)
         elif len(timestamp_str) == 13:
-            # 毫秒时间戳
-            return pd.to_datetime(timestamp, unit='ms')
+            # 毫秒时间戳，转换为本地时区
+            return pd.to_datetime(timestamp, unit='ms', utc=True).tz_convert('Asia/Shanghai').tz_localize(None)
         elif len(timestamp_str) > 13:
-            # 纳秒时间戳
-            return pd.to_datetime(timestamp, unit='ns')
+            # 纳秒时间戳，转换为本地时区
+            return pd.to_datetime(timestamp, unit='ns', utc=True).tz_convert('Asia/Shanghai').tz_localize(None)
         else:
             # 其他情况，尝试直接转换
             return pd.to_datetime(timestamp)
