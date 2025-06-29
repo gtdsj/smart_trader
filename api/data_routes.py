@@ -125,7 +125,7 @@ async def get_data_service_status(service: DataService = Depends(get_data_servic
             "is_running": service.is_running,
             "last_update": service.last_update_time.isoformat() if service.last_update_time else None,
             "watched_stocks_count": len(service.watched_stocks),
-            "cache_status": "connected" if service.redis_client else "disconnected"
+            "cache_status": "connected" if service.cache_client else "disconnected"
         }
         
         return ApiResponse(
@@ -1105,12 +1105,12 @@ async def get_market_status(service: DataService = Depends(get_data_service)):
 async def get_cache_stats(service: DataService = Depends(get_data_service)):
     """获取缓存统计"""
     try:
-        if not service.redis_client:
-            raise HTTPException(status_code=500, detail="Redis客户端未连接")
+        if not service.cache_client:
+            raise HTTPException(status_code=500, detail="缓存客户端未连接")
         
         # 获取缓存键统计
-        keys = await service.redis_client.redis.keys("stock_data:*")
-        realtime_keys = await service.redis_client.redis.keys("realtime:*")
+        keys = await service.cache_client.keys("stock_data:*")
+        realtime_keys = await service.cache_client.keys("realtime:*")
         
         stats = {
             "total_cached_stocks": len(keys),
@@ -1136,15 +1136,16 @@ async def clear_cache(
 ):
     """清空缓存"""
     try:
-        if not service.redis_client:
-            raise HTTPException(status_code=500, detail="Redis客户端未连接")
+        if not service.cache_client:
+            raise HTTPException(status_code=500, detail="缓存客户端未连接")
         
         # 获取匹配的键
-        keys = await service.redis_client.redis.keys(pattern)
+        keys = await service.cache_client.keys(pattern)
         
         if keys:
             # 删除键
-            await service.redis_client.redis.delete(*keys)
+            for key in keys:
+                await service.cache_client.delete(key)
             cleared_count = len(keys)
         else:
             cleared_count = 0

@@ -14,7 +14,7 @@ from sqlalchemy import select, insert, update, and_, desc
 
 from config import get_settings
 from core.database import get_db, TradingOrder, Position
-from core.redis_client import get_redis
+from core.cache_adapter import get_cache_client
 from services.notification_service import NotificationService
 from services.xtquant_service import XtQuantService
 
@@ -51,7 +51,7 @@ class TradingService:
     
     def __init__(self):
         self.settings = get_settings()
-        self.redis_client = get_redis()
+        self.cache_client = get_cache_client()
         self.notification_service = NotificationService()
         self.xtquant_service = XtQuantService()
         

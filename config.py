@@ -38,18 +38,7 @@ class DatabaseConfig(BaseModel):
             return f"sqlite:///{self.path}"
 
 
-class RedisConfig(BaseModel):
-    """Redis配置"""
-    host: str = Field(default="localhost", description="Redis主机")
-    port: int = Field(default=6379, description="Redis端口")
-    password: Optional[str] = Field(default=None, description="Redis密码")
-    db: int = Field(default=0, description="Redis数据库")
-    
-    @property
-    def url(self) -> str:
-        if self.password:
-            return f"redis://:{self.password}@{self.host}:{self.port}/{self.db}"
-        return f"redis://{self.host}:{self.port}/{self.db}"
+# Redis配置已移除，使用本地缓存替代
 
 
 class XtQuantConfig(BaseModel):
@@ -103,7 +92,7 @@ class SystemConfig(BaseModel):
     
     # 子配置
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
-    redis: RedisConfig = Field(default_factory=RedisConfig)
+    # redis: RedisConfig = Field(default_factory=RedisConfig)  # 已移除Redis配置
     xtquant: XtQuantConfig = Field(default_factory=XtQuantConfig)
     dingtalk: DingTalkConfig = Field(default_factory=DingTalkConfig)
     trading: TradingConfig = Field(default_factory=TradingConfig)
@@ -164,11 +153,11 @@ class ConfigManager:
             'DB_MEMORY': ['database', 'memory'],
             'DB_PATH': ['database', 'path'],
             
-            # Redis配置
-            'REDIS_HOST': ['redis', 'host'],
-            'REDIS_PORT': ['redis', 'port'],
-            'REDIS_PASSWORD': ['redis', 'password'],
-            'REDIS_DB': ['redis', 'db'],
+            # Redis配置已移除
+    # 'REDIS_HOST': ['redis', 'host'],
+    # 'REDIS_PORT': ['redis', 'port'],
+    # 'REDIS_PASSWORD': ['redis', 'password'],
+    # 'REDIS_DB': ['redis', 'db'],
             
             # XtQuant配置
             'XTQUANT_PATH': ['xtquant', 'path'],

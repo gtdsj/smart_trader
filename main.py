@@ -11,7 +11,7 @@ from loguru import logger
 
 from config import get_settings, SystemConfig
 from core.database import init_database
-from core.redis_client import init_redis
+from core.cache_adapter import init_cache
 from api.data_routes import router as data_router, set_data_service
 from api.data_backfill_routes import router as data_backfill_router
 from api.trading_routes import router as trading_router, set_trading_service
@@ -46,9 +46,9 @@ async def lifespan(app: FastAPI):
     init_database()
     logger.info("数据库初始化完成")
     
-    # 初始化Redis
-    await init_redis()
-    logger.info("Redis初始化完成")
+    # 初始化缓存
+    await init_cache()
+    logger.info("缓存初始化完成")
     
     # 初始化服务
     xtquant_service = XtQuantService()

@@ -19,7 +19,7 @@ Smart Trader 是一个基于 Python 的智能量化交易系统，集成了数�
 
 - **Web框架**: FastAPI
 - **数据库**: PostgreSQL + SQLAlchemy ORM
-- **缓存**: Redis
+- **缓存**: 本地内存缓存
 - **数据源**: XtQuant (迅投量化)
 - **通知**: 钉钉群机器人
 - **数据分析**: pandas, numpy, talib
@@ -34,7 +34,7 @@ smart_trader/
 ├── requirements.txt       # 依赖包
 ├── core/                  # 核心模块
 │   ├── database.py        # 数据库连接和ORM模型
-│   └── redis_client.py    # Redis客户端
+│   └── cache_adapter.py   # 缓存适配器
 ├── services/              # 业务服务
 │   ├── data_service.py    # 数据服务
 │   ├── trading_service.py # 交易服务
@@ -60,7 +60,7 @@ pip install -r requirements.txt
 
 ### 2. 配置数据库
 
-确保 PostgreSQL 和 Redis 服务正在运行，并在 `config.py` 中配置相应的连接信息。
+确保 PostgreSQL 服务正在运行，并在 `config.py` 中配置相应的连接信息。
 
 ### 3. 配置 XtQuant
 

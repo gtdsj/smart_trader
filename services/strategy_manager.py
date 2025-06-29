@@ -21,7 +21,7 @@ from core.database import (
     get_db, Strategy, StrategyCondition, StrategyExecution, 
     StrategySignal, StockData
 )
-from core.redis_client import get_redis
+from core.cache_adapter import get_cache_client
 from services.data_service import DataService
 
 
@@ -78,7 +78,7 @@ class StrategyManager:
     
     def __init__(self):
         self.settings = get_settings()
-        self.redis_client = get_redis()
+        self.cache_client = get_cache_client()
         self.data_service = None  # 延迟初始化
         
         # 内置技术指标列表

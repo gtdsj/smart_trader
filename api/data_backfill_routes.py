@@ -43,7 +43,7 @@ class BackfillScheduleRequest(BaseModel):
     enabled: bool = Field(True, description="是否启用")
 
 
-# 全局任务状态存储（实际应用中应使用Redis或数据库）
+# 全局任务状态存储（实际应用中应使用数据库）
 _running_tasks = {}
 _task_history = []
 _scheduled_tasks = {}

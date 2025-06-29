@@ -16,7 +16,7 @@ from sqlalchemy import select, insert, update, and_, desc
 
 from config import get_settings
 from core.database import get_db, BacktestResult, Strategy
-from core.redis_client import get_redis
+from core.cache_adapter import get_cache_client
 from services.notification_service import NotificationService
 from services.data_service import DataService
 from services.strategy_service import StrategyService, SignalType
@@ -262,7 +262,7 @@ class BacktestService:
     
     def __init__(self):
         self.settings = get_settings()
-        self.redis_client = get_redis()
+        self.cache_client = get_cache_client()
         self.notification_service = NotificationService()
         self.data_service = None  # 延迟初始化
         self.strategy_service = None  # 延迟初始化
@@ -321,7 +321,7 @@ class BacktestService:
                 await db.commit()
             
             # 缓存配置
-            await self.redis_client.set(f"backtest_config:{backtest_id}", backtest_config, expire=86400)
+            await self.cache_client.set(f"backtest_config:{backtest_id}", backtest_config, expire=86400)
             
             logger.info(f"创建回测任务: {backtest_id}")
             return backtest_id
@@ -334,7 +334,7 @@ class BacktestService:
         """启动回测"""
         try:
             # 获取回测配置
-            config = await self.redis_client.get(f"backtest_config:{backtest_id}")
+            config = await self.cache_client.get(f"backtest_config:{backtest_id}")
             if not config:
                 logger.error(f"回测配置不存在: {backtest_id}")
                 return False
@@ -398,7 +398,7 @@ class BacktestService:
                     return None
                 
                 # 获取详细结果
-                detailed_result = await self.redis_client.get(f"backtest_result:{backtest_id}")
+                detailed_result = await self.cache_client.get(f"backtest_result:{backtest_id}")
                 
                 base_result = {
                     "id": backtest.id,
@@ -490,7 +490,7 @@ class BacktestService:
                 
                 # 更新进度
                 progress = (i + 1) / len(trading_days) * 100
-                await self.redis_client.set(
+                await self.cache_client.set(
                     f"backtest_progress:{backtest_id}", 
                     {"progress": progress, "current_date": current_date.strftime("%Y-%m-%d")},
                     expire=3600
@@ -647,7 +647,7 @@ class BacktestService:
                                   performance: Dict[str, Any]):
         """保存回测结果"""
         try:
-            # 保存详细结果到Redis
+            # 保存详细结果到缓存
             detailed_result = {
                 "daily_values": portfolio.daily_values,
                 "trades": [
@@ -676,7 +676,7 @@ class BacktestService:
                 "performance": performance
             }
             
-            await self.redis_client.set(
+            await self.cache_client.set(
                 f"backtest_result:{backtest_id}", 
                 detailed_result, 
                 expire=86400 * 30  # 保存30天
@@ -721,10 +721,10 @@ class BacktestService:
                 await db.commit()
             
             # 更新缓存
-            config = await self.redis_client.get(f"backtest_config:{backtest_id}")
+            config = await self.cache_client.get(f"backtest_config:{backtest_id}")
             if config:
                 config["status"] = status.value
-                await self.redis_client.set(f"backtest_config:{backtest_id}", config, expire=86400)
+                await self.cache_client.set(f"backtest_config:{backtest_id}", config, expire=86400)
             
         except Exception as e:
             logger.error(f"更新回测状态失败: {e}, {traceback.format_exc()}")
@@ -732,7 +732,7 @@ class BacktestService:
     async def get_backtest_progress(self, backtest_id: str) -> Optional[Dict[str, Any]]:
         """获取回测进度"""
         try:
-            progress = await self.redis_client.get(f"backtest_progress:{backtest_id}")
+            progress = await self.cache_client.get(f"backtest_progress:{backtest_id}")
             return progress
         except Exception as e:
             logger.error(f"获取回测进度失败: {e}, {traceback.format_exc()}")

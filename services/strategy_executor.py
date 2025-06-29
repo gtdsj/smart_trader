@@ -19,7 +19,7 @@ from core.database import (
     get_db, Strategy, StrategyCondition, StrategyExecution, 
     StrategySignal, StockData
 )
-from core.redis_client import get_redis
+from core.cache_adapter import get_cache_client
 from services.data_service import DataService
 from services.strategy_manager import StrategyManager, SignalType, ExecutionStatus
 
@@ -29,7 +29,7 @@ class StrategyExecutor:
     
     def __init__(self):
         self.settings = get_settings()
-        self.redis_client = get_redis()
+        self.cache_client = get_cache_client()
         self.data_service = None  # 延迟初始化
         self.strategy_manager = None  # 延迟初始化
         

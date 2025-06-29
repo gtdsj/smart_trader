@@ -435,9 +435,9 @@ async def get_latest_signals(
 ):
     """获取最新信号"""
     try:
-        # 从Redis缓存获取最新信号
+        # 从缓存获取最新信号
         cache_key = "latest_signals"
-        cached_signals = await service.redis_client.get(cache_key)
+        cached_signals = await service.cache_client.get(cache_key)
         
         if not cached_signals:
             # 如果缓存为空，运行一次快速扫描
@@ -447,7 +447,7 @@ async def get_latest_signals(
                 signals.extend(strategy_signals)
             
             # 缓存结果
-            await service.redis_client.set(cache_key, signals, expire=300)  # 5分钟缓存
+            await service.cache_client.set(cache_key, signals, expire=300)  # 5分钟缓存
         else:
             signals = cached_signals
         

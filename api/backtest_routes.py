@@ -8,6 +8,7 @@ from datetime import datetime, date
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
 from pydantic import BaseModel, Field, validator
 from loguru import logger
+import json
 
 from services.backtest_service import BacktestService, BacktestStatus
 
@@ -302,8 +303,9 @@ async def get_backtest_trades(
 ):
     """获取交易记录"""
     try:
-        # 从Redis获取详细回测数据
-        backtest_data = await service.redis_client.get(f"backtest_detail:{backtest_id}")
+        # 从缓存获取详细回测数据
+        backtest_data_str = await service.cache_client.get(f"backtest_detail:{backtest_id}")
+        backtest_data = json.loads(backtest_data_str) if backtest_data_str else None
         if not backtest_data:
             raise HTTPException(status_code=404, detail="回测数据不存在")
         
@@ -350,8 +352,9 @@ async def get_backtest_positions(
             except ValueError:
                 raise HTTPException(status_code=400, detail="日期格式必须为 YYYY-MM-DD")
         
-        # 从Redis获取详细回测数据
-        backtest_data = await service.redis_client.get(f"backtest_detail:{backtest_id}")
+        # 从缓存获取详细回测数据
+        backtest_data_str = await service.cache_client.get(f"backtest_detail:{backtest_id}")
+        backtest_data = json.loads(backtest_data_str) if backtest_data_str else None
         if not backtest_data:
             raise HTTPException(status_code=404, detail="回测数据不存在")
         
@@ -399,8 +402,9 @@ async def get_backtest_performance(
             except ValueError:
                 raise HTTPException(status_code=400, detail="结束日期格式必须为 YYYY-MM-DD")
         
-        # 从Redis获取详细回测数据
-        backtest_data = await service.redis_client.get(f"backtest_detail:{backtest_id}")
+        # 从缓存获取详细回测数据
+        backtest_data_str = await service.cache_client.get(f"backtest_detail:{backtest_id}")
+        backtest_data = json.loads(backtest_data_str) if backtest_data_str else None
         if not backtest_data:
             raise HTTPException(status_code=404, detail="回测数据不存在")
         
@@ -455,9 +459,9 @@ async def delete_backtest(
 ):
     """删除回测任务和结果"""
     try:
-        # 删除Redis中的详细数据
-        await service.redis_client.delete(f"backtest_detail:{backtest_id}")
-        await service.redis_client.delete(f"backtest_status:{backtest_id}")
+        # 删除缓存中的详细数据
+        await service.cache_client.delete(f"backtest_detail:{backtest_id}")
+        await service.cache_client.delete(f"backtest_status:{backtest_id}")
         
         # 删除数据库中的记录
         # 这里需要实现数据库删除逻辑

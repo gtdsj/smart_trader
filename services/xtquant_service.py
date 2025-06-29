@@ -28,7 +28,7 @@ except ImportError:
     xtdata = None
 
 from config import get_settings
-from core.redis_client import get_redis
+from core.cache_adapter import get_cache_client
 from services.notification_service import NotificationService
 
 
@@ -153,7 +153,7 @@ class XtQuantService:
             return
         self._initialized = True
         self.settings = get_settings()
-        self.redis_client = get_redis()
+        self.cache_client = get_cache_client()
         self.notification_service = NotificationService()
         
         # 为每个实例分配唯一的session_id
@@ -309,14 +309,14 @@ class XtQuantService:
             
             # 获取股票列表
             if market == "SH":
-                stocks = xtdata.get_stock_list_in_sector("沪股通")
+                stocks = xtdata.get_stock_list_in_sector("上证A股")
             elif market == "SZ":
-                stocks = xtdata.get_stock_list_in_sector("深股通")
+                stocks = xtdata.get_stock_list_in_sector("深证A股")
             else:
-                sh_stocks = xtdata.get_stock_list_in_sector("沪股通")
-                sz_stocks = xtdata.get_stock_list_in_sector("深股通")
+                sh_stocks = xtdata.get_stock_list_in_sector("上证A股")
+                sz_stocks = xtdata.get_stock_list_in_sector("深证A股")
                 stocks = sh_stocks + sz_stocks
-            
+            logger.info(f"get_stock_list...1, {stocks}")
             stock_list = []
             for stock_code in stocks:
                 # 获取股票基本信息
@@ -808,9 +808,9 @@ class XtQuantService:
     async def _handle_realtime_data(self, stock_code: str, data: Any):
         """处理实时数据推送"""
         try:
-            # 缓存到Redis
+            # 缓存到本地缓存
             cache_key = f"realtime:{stock_code}"
-            await self.redis_client.setex(
+            await self.cache_client.setex(
                 cache_key, 
                 300,  # 5分钟过期
                 str(data)

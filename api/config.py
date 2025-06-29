@@ -42,12 +42,13 @@ class DatabaseConfigRequest(BaseModel):
     password: Optional[str] = Field(None, description="密码")
     database: Optional[str] = Field(None, description="数据库名")
 
-class RedisConfigRequest(BaseModel):
-    """Redis配置请求"""
-    host: Optional[str] = Field(None, description="Redis主机")
-    port: Optional[int] = Field(None, description="Redis端口", ge=1, le=65535)
-    password: Optional[str] = Field(None, description="Redis密码")
-    db: Optional[int] = Field(None, description="数据库编号", ge=0, le=15)
+# Redis配置请求已移除
+# class RedisConfigRequest(BaseModel):
+#     """Redis配置请求"""
+#     host: Optional[str] = Field(None, description="Redis主机")
+#     port: Optional[int] = Field(None, description="Redis端口", ge=1, le=65535)
+#     password: Optional[str] = Field(None, description="Redis密码")
+#     db: Optional[int] = Field(None, description="数据库编号", ge=0, le=15)
 
 class XtQuantConfigRequest(BaseModel):
     """XtQuant配置请求"""

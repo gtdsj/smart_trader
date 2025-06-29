@@ -27,7 +27,8 @@ def demo_basic_usage():
     print(f"版本: {settings.version}")
     print(f"API端口: {settings.api_port}")
     print(f"数据库URL: {settings.database.url}")
-    print(f"Redis URL: {settings.redis.url}")
+    # Redis配置已移除
+# print(f"Redis URL: {settings.redis.url}")
     print()
 
 

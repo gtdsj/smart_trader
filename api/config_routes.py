@@ -24,12 +24,13 @@ class DatabaseConfigRequest(BaseModel):
     database: Optional[str] = Field(None, description="数据库名")
 
 
-class RedisConfigRequest(BaseModel):
-    """Redis配置请求"""
-    host: Optional[str] = Field(None, description="Redis主机")
-    port: Optional[int] = Field(None, description="Redis端口", ge=1, le=65535)
-    password: Optional[str] = Field(None, description="Redis密码")
-    db: Optional[int] = Field(None, description="数据库编号", ge=0, le=15)
+# Redis配置请求已移除
+# class RedisConfigRequest(BaseModel):
+#     """Redis配置请求"""
+#     host: Optional[str] = Field(None, description="Redis主机")
+#     port: Optional[int] = Field(None, description="Redis端口", ge=1, le=65535)
+#     password: Optional[str] = Field(None, description="Redis密码")
+#     db: Optional[int] = Field(None, description="数据库编号", ge=0, le=15)
 
 
 class XtQuantConfigRequest(BaseModel):
@@ -120,12 +121,12 @@ def get_config_description(section: str, key: str) -> str:
             "password": "数据库密码",
             "database": "数据库名称"
         },
-        "redis": {
-            "host": "Redis服务器地址",
-            "port": "Redis端口号",
-            "password": "Redis密码",
-            "db": "Redis数据库编号"
-        },
+        # "redis": {
+        #     "host": "Redis服务器地址",
+        #     "port": "Redis端口号",
+        #     "password": "Redis密码",
+        #     "db": "Redis数据库编号"
+        # },
         "xtquant": {
             "path": "MiniQMT客户端路径",
             "session_id": "交易会话ID",
@@ -167,7 +168,7 @@ def is_sensitive_config(section: str, key: str) -> bool:
     """判断是否为敏感配置"""
     sensitive_keys = {
         "database": ["password"],
-        "redis": ["password"],
+        # "redis": ["password"],  # Redis已移除
         "dingtalk": ["secret"],
         "xtquant": ["account_id"]
     }
@@ -200,23 +201,23 @@ async def get_all_configs(settings: SystemConfig = Depends(get_settings)):
                 "is_sensitive": is_sensitive_config("database", key)
             })
         
-        # Redis配置
-        redis_configs = [
-            ("host", settings.redis.host),
-            ("port", settings.redis.port),
-            ("password", settings.redis.password),
-            ("db", settings.redis.db)
-        ]
-        
-        for key, value in redis_configs:
-            configs.append({
-                "section": "redis",
-                "key": key,
-                "value": mask_sensitive_value(str(value)) if is_sensitive_config("redis", key) else value,
-                "description": get_config_description("redis", key),
-                "data_type": type(value).__name__,
-                "is_sensitive": is_sensitive_config("redis", key)
-            })
+        # Redis配置已移除
+        # redis_configs = [
+        #     ("host", settings.redis.host),
+        #     ("port", settings.redis.port),
+        #     ("password", settings.redis.password),
+        #     ("db", settings.redis.db)
+        # ]
+        # 
+        # for key, value in redis_configs:
+        #     configs.append({
+        #         "section": "redis",
+        #         "key": key,
+        #         "value": mask_sensitive_value(str(value)) if is_sensitive_config("redis", key) else value,
+        #         "description": get_config_description("redis", key),
+        #         "data_type": type(value).__name__,
+        #         "is_sensitive": is_sensitive_config("redis", key)
+        #     })
         
         # XtQuant配置
         xtquant_configs = [
@@ -311,7 +312,7 @@ async def get_section_config(
 ):
     """获取指定节的配置"""
     try:
-        valid_sections = ["database", "redis", "xtquant", "dingtalk", "trading", "backtest"]
+        valid_sections = ["database", "xtquant", "dingtalk", "trading", "backtest"]  # redis已移除
         if section not in valid_sections:
             raise HTTPException(status_code=400, detail=f"无效的配置节，有效值: {', '.join(valid_sections)}")
         
@@ -323,13 +324,13 @@ async def get_section_config(
                 "password": mask_sensitive_value(settings.database.password),
                 "database": settings.database.database
             }
-        elif section == "redis":
-            config_data = {
-                "host": settings.redis.host,
-                "port": settings.redis.port,
-                "password": mask_sensitive_value(settings.redis.password) if settings.redis.password else "",
-                "db": settings.redis.db
-            }
+        # elif section == "redis":  # Redis配置已移除
+        #     config_data = {
+        #         "host": settings.redis.host,
+        #         "port": settings.redis.port,
+        #         "password": mask_sensitive_value(settings.redis.password) if settings.redis.password else "",
+        #         "db": settings.redis.db
+        #     }
         elif section == "xtquant":
             config_data = {
                 "path": settings.xtquant.path,
@@ -416,40 +417,41 @@ async def update_database_config(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/redis", response_model=ApiResponse, summary="更新Redis配置")
-async def update_redis_config(
-    request: RedisConfigRequest,
-    settings: SystemConfig = Depends(get_settings)
-):
-    """更新Redis配置"""
-    try:
-        updated_fields = []
-        
-        if request.host is not None:
-            settings.redis.host = request.host
-            updated_fields.append("host")
-        
-        if request.port is not None:
-            settings.redis.port = request.port
-            updated_fields.append("port")
-        
-        if request.password is not None:
-            settings.redis.password = request.password
-            updated_fields.append("password")
-        
-        if request.db is not None:
-            settings.redis.db = request.db
-            updated_fields.append("db")
-        
-        return ApiResponse(
-            success=True,
-            message=f"更新Redis配置成功，更新字段: {', '.join(updated_fields)}",
-            data={"updated_fields": updated_fields}
-        )
-    
-    except Exception as e:
-        logger.error(f"更新Redis配置失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Redis配置更新路由已移除
+# @router.post("/redis", response_model=ApiResponse, summary="更新Redis配置")
+# async def update_redis_config(
+#     request: RedisConfigRequest,
+#     settings: SystemConfig = Depends(get_settings)
+# ):
+#     """更新Redis配置"""
+#     try:
+#         updated_fields = []
+#         
+#         if request.host is not None:
+#             settings.redis.host = request.host
+#             updated_fields.append("host")
+#         
+#         if request.port is not None:
+#             settings.redis.port = request.port
+#             updated_fields.append("port")
+#         
+#         if request.password is not None:
+#             settings.redis.password = request.password
+#             updated_fields.append("password")
+#         
+#         if request.db is not None:
+#             settings.redis.db = request.db
+#             updated_fields.append("db")
+#         
+#         return ApiResponse(
+#             success=True,
+#             message=f"更新Redis配置成功，更新字段: {', '.join(updated_fields)}",
+#             data={"updated_fields": updated_fields}
+#         )
+#     
+#     except Exception as e:
+#         logger.error(f"更新Redis配置失败: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/xtquant", response_model=ApiResponse, summary="更新XtQuant配置")
@@ -676,21 +678,22 @@ async def validate_config(
                     "message": f"数据库连接失败: {str(e)}"
                 })
         
-        elif section == "redis":
-            # 验证Redis连接
-            try:
-                # 这里应该实际测试Redis连接
-                validation_results.append({
-                    "item": "redis_connection",
-                    "valid": True,
-                    "message": "Redis连接配置有效"
-                })
-            except Exception as e:
-                validation_results.append({
-                    "item": "redis_connection",
-                    "valid": False,
-                    "message": f"Redis连接失败: {str(e)}"
-                })
+        # Redis验证已移除
+        # elif section == "redis":
+        #     # 验证Redis连接
+        #     try:
+        #         # 这里应该实际测试Redis连接
+        #         results.append({
+        #             "item": "redis_connection",
+        #             "status": "success",
+        #             "message": "Redis连接配置有效"
+        #         })
+        #     except Exception as e:
+        #         results.append({
+        #             "item": "redis_connection",
+        #             "status": "error",
+        #             "message": f"Redis连接失败: {str(e)}"
+        #         })
         
         elif section == "xtquant":
             # 验证XtQuant配置
@@ -735,7 +738,7 @@ async def reset_config(
 ):
     """重置指定节的配置为默认值"""
     try:
-        valid_sections = ["database", "redis", "xtquant", "dingtalk", "trading", "backtest"]
+        valid_sections = ["database", "xtquant", "dingtalk", "trading", "backtest"]  # redis已移除
         if section not in valid_sections:
             raise HTTPException(status_code=400, detail=f"无效的配置节，有效值: {', '.join(valid_sections)}")
         

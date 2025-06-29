@@ -15,7 +15,7 @@ from core.time_utils import TimeUtils
 
 from config import get_settings
 from core.database import get_db
-from core.redis_client import get_redis
+from core.cache_adapter import get_cache_client
 from core.duckdb_adapter import DuckDBAdapter
 from services.notification_service import NotificationService
 from services.xtquant_service import XtQuantService, Period
@@ -26,7 +26,7 @@ class DataService:
     
     def __init__(self):
         self.settings = get_settings()
-        self.redis_client = get_redis()
+        self.cache_client = get_cache_client()
         self.notification_service = NotificationService()
         self.xtquant_service = XtQuantService()
         self.is_running = False
@@ -141,13 +141,14 @@ class DataService:
         try:
             # 构建缓存键
             cache_key = f"stock_list:{market or 'ALL'}"
-            cached_data = await self.redis_client.get(cache_key)
+            cached_data = await self.cache_client.get(cache_key)
             if cached_data:
                 logger.debug(f"从缓存获取{market or '全部'}市场股票列表")
                 return cached_data
             
             # 从XtQuant获取
-            stock_result = self.xtquant_service.get_stock_list()
+            stock_result = await self.xtquant_service.get_stock_list()
+            logger.info(f"从XtQuant获取股票列表:{stock_result}")
             if stock_result:
                 stocks = stock_result
                 
@@ -156,7 +157,7 @@ class DataService:
                     stocks = [stock for stock in stocks if stock.get("market") == market]
                 
                 # 缓存30分钟
-                await self.redis_client.set(cache_key, stocks, expire=1800)
+                await self.cache_client.set(cache_key, stocks, expire=1800)
                 logger.info(f"获取{market or '全部'}市场股票列表成功，共{len(stocks)}只股票")
                 return stocks
             else:
@@ -179,7 +180,7 @@ class DataService:
                 # 缓存数据
                 for stock_code, data in result.items():
                     cache_key = f"realtime:{stock_code}"
-                    await self.redis_client.set(cache_key, data, expire=30)  # 30秒缓存
+                    await self.cache_client.set(cache_key, data, expire=30)  # 30秒缓存
                 
                 return result
             else:
@@ -197,7 +198,7 @@ class DataService:
         cache_key = f"historical:{stock_code}:{start_date}:{end_date}:{period}"
         
         # 尝试从缓存获取
-        cached_data = await self.redis_client.get(cache_key)
+        cached_data = await self.cache_client.get(cache_key)
         if cached_data:
             return pd.DataFrame(cached_data)
         
@@ -215,7 +216,7 @@ class DataService:
                 df = pd.DataFrame(data)
                 
                 # 缓存数据
-                await self.redis_client.set(cache_key, data, expire=3600)  # 1小时缓存
+                await self.cache_client.set(cache_key, data, expire=3600)  # 1小时缓存
                 
                 return df
             else:
@@ -855,8 +856,8 @@ class DataService:
     
     async def _get_watched_stocks(self) -> List[str]:
         """获取关注的股票列表"""
-        # 从Redis获取关注股票列表
-        watched_stocks = await self.redis_client.get("watched_stocks")
+        # 从缓存获取关注股票列表
+        watched_stocks = await self.cache_client.get("watched_stocks")
         if watched_stocks:
             return watched_stocks
         
@@ -866,7 +867,7 @@ class DataService:
             "000858.SZ", "002415.SZ", "600519.SH", "000858.SZ"
         ]
         
-        await self.redis_client.set("watched_stocks", default_stocks, expire=3600)
+        await self.cache_client.set("watched_stocks", default_stocks, expire=3600)
         return default_stocks
     
     def _get_latest_date_from_db(self, stock_code: str) -> str:
@@ -904,7 +905,7 @@ class DataService:
             watched_stocks = await self._get_watched_stocks()
             if stock_code not in watched_stocks:
                 watched_stocks.append(stock_code)
-                await self.redis_client.set("watched_stocks", watched_stocks, expire=3600)
+                await self.cache_client.set("watched_stocks", watched_stocks, expire=3600)
                 logger.info(f"添加关注股票: {stock_code}")
             return True
         except Exception as e:
@@ -917,7 +918,7 @@ class DataService:
             watched_stocks = await self._get_watched_stocks()
             if stock_code in watched_stocks:
                 watched_stocks.remove(stock_code)
-                await self.redis_client.set("watched_stocks", watched_stocks, expire=3600)
+                await self.cache_client.set("watched_stocks", watched_stocks, expire=3600)
                 logger.info(f"移除关注股票: {stock_code}")
             return True
         except Exception as e:
@@ -929,7 +930,7 @@ class DataService:
         cache_key = "market_overview"
         
         # 尝试从缓存获取
-        cached_data = await self.redis_client.get(cache_key)
+        cached_data = await self.cache_client.get(cache_key)
         if cached_data:
             return cached_data
         
@@ -943,7 +944,7 @@ class DataService:
                     overview[name] = realtime_data[code]
             
             # 缓存数据
-            await self.redis_client.set(cache_key, overview, expire=60)  # 1分钟缓存
+            await self.cache_client.set(cache_key, overview, expire=60)  # 1分钟缓存
             
             return overview
             
