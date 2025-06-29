@@ -235,28 +235,28 @@ CREATE TABLE strategy_conditions (
 **用途**: 记录策略的执行历史
 
 **字段说明**:
-- `id`: 主键ID
-- `strategy_id`: 关联策略ID
-- `execution_time`: 执行时间
-- `status`: 执行状态
-- `result`: 执行结果 (JSON格式)
-- `error_message`: 错误信息
-- `created_at`: 创建时间
+    - `id`: 主键ID
+    - `strategy_id`: 关联策略ID
+    - `execution_time`: 执行时间
+    - `status`: 执行状态
+    - `result`: 执行结果 (JSON格式)
+    - `error_message`: 错误信息
+    - `created_at`: 创建时间
 
 **建表语句**:
-```sql
-CREATE TABLE strategy_executions (
-    id INTEGER NOT NULL,
-    strategy_id INTEGER NOT NULL,
-    execution_time TIMESTAMP,
-    status VARCHAR(20),
-    result JSON,
-    error_message TEXT,
-    created_at TIMESTAMP,
-    PRIMARY KEY (id),
-    FOREIGN KEY(strategy_id) REFERENCES strategies (id)
-);
-```
+    ```sql
+    CREATE TABLE strategy_executions (
+        id INTEGER NOT NULL,
+        strategy_id INTEGER NOT NULL,
+        execution_time TIMESTAMP,
+        status VARCHAR(20),
+        result JSON,
+        error_message TEXT,
+        created_at TIMESTAMP,
+        PRIMARY KEY (id),
+        FOREIGN KEY(strategy_id) REFERENCES strategies (id)
+    );
+    ```
 
 #### 3.4 strategy_signals (策略信号表)
 
