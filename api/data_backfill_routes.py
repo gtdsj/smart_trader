@@ -409,7 +409,14 @@ async def _execute_backfill_task(
             task_info["current_batch"] = f"{i // request.batch_size + 1}/{(total_stocks + request.batch_size - 1) // request.batch_size}"
             
             # 处理当前批次
-            batch_result = await service.batch_update_daily_data(batch_stocks)
+            batch_result = await service.batch_update_daily_data(
+                batch_stocks, 
+                batch_size=request.batch_size,
+                delay_seconds=request.delay_seconds,
+                force_update=request.force_update,
+                start_date=request.start_date,
+                end_date=request.end_date
+            )
             success_count += batch_result.get("success_count", 0)
             failed_count += batch_result.get("failed_count", 0)
             

@@ -406,7 +406,7 @@ class XtQuantService:
                             period=xt_period,
                             count=count
                         )
-                    logger.info("获取到的原始数据: " + str(data))
+
                     if data and isinstance(data, dict):
                         # 根据API文档，返回格式为 { field1: DataFrame, field2: DataFrame, ... }
                         # DataFrame的index为stock_list，columns为time_list

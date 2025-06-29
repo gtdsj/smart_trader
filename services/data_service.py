@@ -505,7 +505,9 @@ class DataService:
             
             for stock_code in batch:
                 try:
-                    result = await self.get_stock_daily_data(stock_code, save_to_db=True)
+                    # 使用传入的日期参数，如果没有传start_date则使用1990-01-01
+                    actual_start_date = start_date if start_date else "1990-01-01"
+                    result = await self.get_stock_daily_data(stock_code, start_date=actual_start_date, end_date=end_date, save_to_db=True)
                     if result is not None and not result.empty:
                         success_count += 1
                         logger.info(f"成功更新 {stock_code} 日线数据")
@@ -529,7 +531,8 @@ class DataService:
         }
     
     async def batch_update_daily_data(self, stock_codes: List[str], batch_size: int = 30, 
-                                    delay_seconds: float = 0.2, force_update: bool = False) -> Dict[str, Any]:
+                                    delay_seconds: float = 0.2, force_update: bool = False,
+                                    start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
         """
         公开的批量更新日线数据接口
         
@@ -538,6 +541,8 @@ class DataService:
             batch_size: 批量大小
             delay_seconds: 批次间延迟秒数
             force_update: 是否强制更新
+            start_date: 开始日期，格式YYYY-MM-DD，为None时获取所有历史数据
+            end_date: 结束日期，格式YYYY-MM-DD
             
         Returns:
             Dict: 更新结果统计
