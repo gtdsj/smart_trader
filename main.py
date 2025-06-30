@@ -24,6 +24,7 @@ from api.strategy_routes import router as strategy_router, set_strategy_service
 from api.backtest_routes import router as backtest_router, set_backtest_service
 from api.notification_routes import router as notification_router, set_notification_service
 from api.config_routes import router as config_router
+from api.scheduler_routes import router as scheduler_router
 from services.notification_service import NotificationService
 from services.data_service import DataService
 from services.trading_service import TradingService
@@ -32,6 +33,7 @@ from services.backtest_service import BacktestService
 from services.xtquant_service import XtQuantService
 from services.strategy_manager import StrategyManager
 from services.strategy_executor import StrategyExecutor
+from services.scheduler_service import SchedulerService
 
 
 @asynccontextmanager
@@ -66,6 +68,10 @@ async def lifespan(app: FastAPI):
     strategy_manager = StrategyManager()
     strategy_executor = StrategyExecutor()
     
+    # 初始化调度器服务
+    scheduler_service = SchedulerService(data_service, notification_service)
+    await scheduler_service.start()
+    
     # 设置服务依赖
     strategy_executor.set_data_service(data_service)
     strategy_executor.set_strategy_manager(strategy_manager)
@@ -88,6 +94,9 @@ async def lifespan(app: FastAPI):
     yield
     
     # 停止服务
+    if hasattr(app.state, 'scheduler_service'):
+        await app.state.scheduler_service.stop()
+    
     if hasattr(app.state, 'backtest_service'):
         await app.state.backtest_service.stop()
     
@@ -133,6 +142,7 @@ def create_app() -> FastAPI:
     app.include_router(backtest_router)
     app.include_router(notification_router)
     app.include_router(config_router)
+    app.include_router(scheduler_router)
     
     @app.get("/", tags=["系统"])
     async def root():
