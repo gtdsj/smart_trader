@@ -71,16 +71,49 @@ class DuckDBAdapter:
             else:
                 self.connection = duckdb.connect(":memory:")
                 log_info("DuckDB内存数据库连接成功")
+            
+            # 应用性能优化配置
+            self._optimize_connection()
+            
         except Exception as e:
             log_error(f"DuckDB连接失败: {e}, {traceback.format_exc()}")
             # 如果仍然失败，尝试使用内存数据库作为备选方案
             try:
                 log_warning("尝试使用内存数据库作为备选方案")
                 self.connection = duckdb.connect(":memory:")
+                self._optimize_connection()
                 log_info("DuckDB内存数据库备选连接成功")
             except Exception as fallback_e:
                 log_error(f"备选连接也失败: {fallback_e}")
                 raise
+    
+    def _optimize_connection(self):
+        """优化DuckDB连接性能配置"""
+        try:
+            # 设置内存限制 (2GB)
+            self.connection.execute("SET memory_limit='2GB'")
+            
+            # 设置线程数为CPU核心数
+            import os
+            cpu_count = os.cpu_count() or 4
+            self.connection.execute(f"SET threads={cpu_count}")
+            
+            # 启用并行处理
+            self.connection.execute("SET enable_progress_bar=false")
+            
+            # 设置临时目录
+            temp_dir = os.path.join(os.path.dirname(self.db_path) if self.db_path else os.getcwd(), 'temp')
+            if not os.path.exists(temp_dir):
+                os.makedirs(temp_dir, exist_ok=True)
+            self.connection.execute(f"SET temp_directory='{temp_dir}'")
+            
+            # 优化查询性能
+            self.connection.execute("SET enable_optimizer=true")
+            
+            log_info(f"DuckDB性能优化配置完成: 线程数={cpu_count}, 内存限制=2GB")
+            
+        except Exception as e:
+            log_warning(f"DuckDB性能优化配置失败: {e}")
     
     def execute(self, sql: str, params: tuple = None) -> Any:
         """执行SQL语句

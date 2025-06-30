@@ -423,7 +423,7 @@ async def incremental_update_all_stocks(
         logger.info(f"获取到{len(stock_codes)}只股票，开始批量更新")
         
         # 批量更新数据
-        result = await service._batch_update_daily_data(stock_codes, batch_size)
+        result = await service._batch_update_daily_data_optimized(stock_codes, batch_size)
         
         return ApiResponse(
             success=True,
