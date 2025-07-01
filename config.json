@@ -31,7 +31,7 @@
     "stop_loss_ratio": 0.03,
     "take_profit_ratio": 0.2,
     "min_trade_amount": 1000.0,
-    "commission_rate": 0.0003,
+    "commission_rate": 0.000085,
     "slippage_rate": 0.001
   },
   "backtest": {

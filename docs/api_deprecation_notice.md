@@ -140,11 +140,10 @@ DELETE /api/v1/data/unified-backfill/task/{task_id}
 ### 文档
 - [统一数据补全接口迁移指南](./unified_backfill_migration_guide.md)
 - [API文档](http://localhost:8000/docs)
-- [优化补全指南](./optimized_backfill_guide.md)
 
-### 示例代码
-- [Python客户端示例](../examples/api_usage_examples.py)
-- [优化补全示例](../examples/optimized_backfill_examples.py)
+
+
+
 
 ### 工具
 - 接口测试工具: Swagger UI (`http://localhost:8000/docs`)
