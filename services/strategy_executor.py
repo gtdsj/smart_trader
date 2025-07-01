@@ -187,7 +187,9 @@ class StrategyExecutor:
                                      execution_type: str) -> int:
         """创建执行记录"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 execution_record = {
                     "strategy_id": strategy_id,
                     "execution_type": execution_type,
@@ -197,11 +199,13 @@ class StrategyExecutor:
                 }
                 
                 stmt = insert(StrategyExecution).values(**execution_record)
-                result = await db.execute(stmt)
+                result = db.execute(stmt)
                 execution_id = result.inserted_primary_key[0]
                 
-                await db.commit()
+                db.commit()
                 return execution_id
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"创建执行记录失败: {e}, {traceback.format_exc()}")
@@ -212,7 +216,9 @@ class StrategyExecutor:
                                      result_data: Any = None, error_message: str = None):
         """更新执行记录"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 update_data = {
                     "status": status,
                     "end_time": datetime.now()
@@ -234,8 +240,10 @@ class StrategyExecutor:
                     StrategyExecution.id == execution_id
                 ).values(**update_data)
                 
-                await db.execute(stmt)
-                await db.commit()
+                db.execute(stmt)
+                db.commit()
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"更新执行记录失败: {e}, {traceback.format_exc()}")
@@ -458,13 +466,17 @@ class StrategyExecutor:
     async def _save_signal(self, signal_data: Dict[str, Any]) -> int:
         """保存信号记录"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 stmt = insert(StrategySignal).values(**signal_data)
-                result = await db.execute(stmt)
+                result = db.execute(stmt)
                 signal_id = result.inserted_primary_key[0]
                 
-                await db.commit()
+                db.commit()
                 return signal_id
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"保存信号记录失败: {e}, {traceback.format_exc()}")
@@ -583,7 +595,9 @@ class StrategyExecutor:
                                  limit: int = 100) -> List[Dict[str, Any]]:
         """获取策略信号"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 query = select(StrategySignal).order_by(desc(StrategySignal.created_at))
                 
                 # 添加过滤条件
@@ -610,7 +624,7 @@ class StrategyExecutor:
                 # 限制结果数量
                 query = query.limit(limit)
                 
-                result = await db.execute(query)
+                result = db.execute(query)
                 signals = result.scalars().all()
                 
                 return [
@@ -631,6 +645,8 @@ class StrategyExecutor:
                     }
                     for signal in signals
                 ]
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"获取策略信号失败: {e}, {traceback.format_exc()}")
@@ -642,7 +658,9 @@ class StrategyExecutor:
                                   limit: int = 20) -> List[Dict[str, Any]]:
         """获取执行历史记录"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 query = select(StrategyExecution).order_by(desc(StrategyExecution.start_time))
                 
                 # 添加过滤条件
@@ -658,7 +676,7 @@ class StrategyExecutor:
                 # 限制结果数量
                 query = query.limit(limit)
                 
-                result = await db.execute(query)
+                result = db.execute(query)
                 executions = result.scalars().all()
                 
                 return [
@@ -677,6 +695,8 @@ class StrategyExecutor:
                     }
                     for execution in executions
                 ]
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"获取执行历史记录失败: {e}, {traceback.format_exc()}")

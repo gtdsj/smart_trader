@@ -13,8 +13,19 @@ from config import get_settings
 from services.data_service import DataService
 from services.xtquant_service import XtQuantService
 
+# 导入统一补全路由
+from ..unified_backfill_routes import router as unified_backfill_router
+
 # 创建数据业务路由器
 router = APIRouter(prefix="/data", tags=["数据业务"])
+
+# 注册统一补全路由
+router.include_router(
+    unified_backfill_router,
+    prefix="/unified-backfill",
+    tags=["数据补全-统一接口"],
+    responses={404: {"description": "Not found"}}
+)
 
 # 获取配置和服务
 settings = get_settings()

@@ -13,7 +13,7 @@ from enum import Enum
 import pandas as pd
 from loguru import logger
 
-from config.data_backfill_config import DataBackfillConfig, DATA_QUALITY_CONFIG
+from configs.data_backfill_config import DataBackfillConfig, DATA_QUALITY_CONFIG
 
 
 class TaskStatus(Enum):

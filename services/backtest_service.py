@@ -302,7 +302,9 @@ class BacktestService:
             }
             
             # 保存到数据库
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 backtest_data = {
                     "backtest_id": backtest_id,
                     "name": name,
@@ -317,8 +319,10 @@ class BacktestService:
                 }
                 
                 stmt = insert(BacktestResult).values(**backtest_data)
-                await db.execute(stmt)
-                await db.commit()
+                db.execute(stmt)
+                db.commit()
+            finally:
+                db.close()
             
             # 缓存配置
             await self.cache_client.set(f"backtest_config:{backtest_id}", backtest_config, expire=86400)
@@ -356,9 +360,11 @@ class BacktestService:
     async def get_backtest_list(self) -> List[Dict[str, Any]]:
         """获取回测列表"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 query = select(BacktestResult).order_by(desc(BacktestResult.created_at))
-                result = await db.execute(query)
+                result = db.execute(query)
                 backtests = result.scalars().all()
                 
                 return [
@@ -381,6 +387,8 @@ class BacktestService:
                     }
                     for bt in backtests
                 ]
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"获取回测列表失败: {e}, {traceback.format_exc()}")
@@ -389,9 +397,11 @@ class BacktestService:
     async def get_backtest_result(self, backtest_id: str) -> Optional[Dict[str, Any]]:
         """获取回测结果"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 query = select(BacktestResult).where(BacktestResult.backtest_id == backtest_id)
-                result = await db.execute(query)
+                result = db.execute(query)
                 backtest = result.scalar_one_or_none()
                 
                 if not backtest:
@@ -425,6 +435,8 @@ class BacktestService:
                     base_result.update(detailed_result)
                 
                 return base_result
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"获取回测结果失败: {e}, {traceback.format_exc()}")
@@ -683,7 +695,9 @@ class BacktestService:
             )
             
             # 更新数据库记录
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 stmt = update(BacktestResult).where(
                     BacktestResult.backtest_id == backtest_id
                 ).values(
@@ -698,8 +712,10 @@ class BacktestService:
                     completed_at=datetime.now()
                 )
                 
-                await db.execute(stmt)
-                await db.commit()
+                db.execute(stmt)
+                db.commit()
+            finally:
+                db.close()
             
             logger.info(f"保存回测结果: {backtest_id}")
             
@@ -709,7 +725,9 @@ class BacktestService:
     async def _update_backtest_status(self, backtest_id: str, status: BacktestStatus):
         """更新回测状态"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 stmt = update(BacktestResult).where(
                     BacktestResult.backtest_id == backtest_id
                 ).values(
@@ -717,8 +735,10 @@ class BacktestService:
                     updated_at=datetime.now()
                 )
                 
-                await db.execute(stmt)
-                await db.commit()
+                db.execute(stmt)
+                db.commit()
+            finally:
+                db.close()
             
             # 更新缓存
             config = await self.cache_client.get(f"backtest_config:{backtest_id}")

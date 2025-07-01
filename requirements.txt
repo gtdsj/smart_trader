@@ -10,6 +10,7 @@ pydantic-settings==2.1.0
 sqlalchemy==2.0.23
 alembic==1.13.1
 duckdb
+duckdb-engine
 
 # Cache and Message Queue
 celery==5.3.4

@@ -68,7 +68,9 @@ class StrategyService:
                             strategy_type: str, parameters: Dict[str, Any]) -> bool:
         """创建策略"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 strategy_data = {
                     "name": name,
                     "description": description,
@@ -79,11 +81,13 @@ class StrategyService:
                 }
                 
                 stmt = insert(Strategy).values(**strategy_data)
-                await db.execute(stmt)
-                await db.commit()
+                db.execute(stmt)
+                db.commit()
                 
                 logger.info(f"创建策略成功: {name}")
                 return True
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"创建策略失败: {e}, {traceback.format_exc()}")
@@ -92,13 +96,15 @@ class StrategyService:
     async def get_strategies(self, active_only: bool = False) -> List[Dict[str, Any]]:
         """获取策略列表"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 query = select(Strategy).order_by(desc(Strategy.created_at))
                 
                 if active_only:
                     query = query.where(Strategy.is_active == True)
                 
-                result = await db.execute(query)
+                result = db.execute(query)
                 strategies = result.scalars().all()
                 
                 return [
@@ -113,6 +119,8 @@ class StrategyService:
                     }
                     for strategy in strategies
                 ]
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"获取策略列表失败: {e}, {traceback.format_exc()}")
@@ -121,7 +129,9 @@ class StrategyService:
     async def activate_strategy(self, strategy_id: int) -> bool:
         """激活策略"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 stmt = update(Strategy).where(
                     Strategy.id == strategy_id
                 ).values(
@@ -129,11 +139,13 @@ class StrategyService:
                     updated_at=datetime.now()
                 )
                 
-                await db.execute(stmt)
-                await db.commit()
+                db.execute(stmt)
+                db.commit()
                 
                 logger.info(f"激活策略: {strategy_id}")
                 return True
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"激活策略失败: {e}, {traceback.format_exc()}")
@@ -142,7 +154,9 @@ class StrategyService:
     async def deactivate_strategy(self, strategy_id: int) -> bool:
         """停用策略"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 stmt = update(Strategy).where(
                     Strategy.id == strategy_id
                 ).values(
@@ -150,11 +164,13 @@ class StrategyService:
                     updated_at=datetime.now()
                 )
                 
-                await db.execute(stmt)
-                await db.commit()
+                db.execute(stmt)
+                db.commit()
                 
                 logger.info(f"停用策略: {strategy_id}")
                 return True
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"停用策略失败: {e}, {traceback.format_exc()}")

@@ -113,7 +113,9 @@ class StrategyManager:
     async def create_strategy(self, strategy_data: Dict[str, Any]) -> Dict[str, Any]:
         """创建策略"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 # 验证策略数据
                 validation_result = await self._validate_strategy_data(strategy_data)
                 if not validation_result["valid"]:
@@ -138,7 +140,7 @@ class StrategyManager:
                 }
                 
                 stmt = insert(Strategy).values(**strategy_record)
-                result = await db.execute(stmt)
+                result = db.execute(stmt)
                 strategy_id = result.inserted_primary_key[0]
                 
                 # 创建策略条件
@@ -146,7 +148,7 @@ class StrategyManager:
                 if conditions:
                     await self._create_strategy_conditions(db, strategy_id, conditions)
                 
-                await db.commit()
+                db.commit()
                 
                 logger.info(f"创建策略成功: {strategy_data['name']} (ID: {strategy_id})")
                 return {
@@ -154,6 +156,8 @@ class StrategyManager:
                     "message": "策略创建成功",
                     "data": {"strategy_id": strategy_id}
                 }
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"创建策略失败: {e}, {traceback.format_exc()}")
@@ -163,7 +167,7 @@ class StrategyManager:
                 "data": None
             }
     
-    async def _create_strategy_conditions(self, db: AsyncSession, strategy_id: int, 
+    async def _create_strategy_conditions(self, db, strategy_id: int, 
                                         conditions: List[Dict[str, Any]]):
         """创建策略条件"""
         for i, condition in enumerate(conditions):
@@ -179,7 +183,7 @@ class StrategyManager:
             }
             
             stmt = insert(StrategyCondition).values(**condition_record)
-            await db.execute(stmt)
+            db.execute(stmt)
     
     async def _validate_strategy_data(self, strategy_data: Dict[str, Any]) -> Dict[str, Any]:
         """验证策略数据"""
@@ -274,7 +278,9 @@ class StrategyManager:
                            active_only: bool = False) -> List[Dict[str, Any]]:
         """获取策略列表"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 query = select(Strategy).options(
                     selectinload(Strategy.strategy_conditions)
                 ).order_by(desc(Strategy.created_at))
@@ -285,7 +291,7 @@ class StrategyManager:
                 if active_only:
                     query = query.where(Strategy.is_active == True)
                 
-                result = await db.execute(query)
+                result = db.execute(query)
                 strategies = result.scalars().all()
                 
                 strategy_list = []
@@ -308,6 +314,8 @@ class StrategyManager:
                     strategy_list.append(strategy_dict)
                 
                 return strategy_list
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"获取策略列表失败: {e}, {traceback.format_exc()}")
@@ -316,12 +324,14 @@ class StrategyManager:
     async def get_strategy_detail(self, strategy_id: int) -> Optional[Dict[str, Any]]:
         """获取策略详情"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 query = select(Strategy).options(
                     selectinload(Strategy.strategy_conditions)
                 ).where(Strategy.id == strategy_id)
                 
-                result = await db.execute(query)
+                result = db.execute(query)
                 strategy = result.scalar_one_or_none()
                 
                 if not strategy:
@@ -357,6 +367,8 @@ class StrategyManager:
                     "updated_at": strategy.updated_at.isoformat() if strategy.updated_at else None,
                     "condition_details": conditions
                 }
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"获取策略详情失败: {e}, {traceback.format_exc()}")
@@ -366,7 +378,9 @@ class StrategyManager:
                             update_data: Dict[str, Any]) -> Dict[str, Any]:
         """更新策略"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 # 验证策略是否存在
                 strategy = await self.get_strategy_detail(strategy_id)
                 if not strategy:
@@ -394,12 +408,12 @@ class StrategyManager:
                         Strategy.id == strategy_id
                     ).values(**update_fields)
                     
-                    await db.execute(stmt)
+                    db.execute(stmt)
                 
                 # 更新条件
                 if "conditions" in update_data:
                     # 删除旧条件
-                    await db.execute(
+                    db.execute(
                         delete(StrategyCondition).where(
                             StrategyCondition.strategy_id == strategy_id
                         )
@@ -410,7 +424,7 @@ class StrategyManager:
                     if conditions:
                         await self._create_strategy_conditions(db, strategy_id, conditions)
                 
-                await db.commit()
+                db.commit()
                 
                 logger.info(f"更新策略成功: {strategy_id}")
                 return {
@@ -418,6 +432,8 @@ class StrategyManager:
                     "message": "策略更新成功",
                     "data": {"strategy_id": strategy_id}
                 }
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"更新策略失败: {e}, {traceback.format_exc()}")
@@ -430,7 +446,9 @@ class StrategyManager:
     async def delete_strategy(self, strategy_id: int) -> Dict[str, Any]:
         """删除策略"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 # 验证策略是否存在
                 strategy = await self.get_strategy_detail(strategy_id)
                 if not strategy:
@@ -449,29 +467,29 @@ class StrategyManager:
                     }
                 
                 # 删除相关数据
-                await db.execute(
+                db.execute(
                     delete(StrategyCondition).where(
                         StrategyCondition.strategy_id == strategy_id
                     )
                 )
                 
-                await db.execute(
+                db.execute(
                     delete(StrategySignal).where(
                         StrategySignal.strategy_id == strategy_id
                     )
                 )
                 
-                await db.execute(
+                db.execute(
                     delete(StrategyExecution).where(
                         StrategyExecution.strategy_id == strategy_id
                     )
                 )
                 
-                await db.execute(
+                db.execute(
                     delete(Strategy).where(Strategy.id == strategy_id)
                 )
                 
-                await db.commit()
+                db.commit()
                 
                 logger.info(f"删除策略成功: {strategy_id}")
                 return {
@@ -479,6 +497,8 @@ class StrategyManager:
                     "message": "策略删除成功",
                     "data": None
                 }
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"删除策略失败: {e}, {traceback.format_exc()}")
@@ -491,7 +511,9 @@ class StrategyManager:
     async def activate_strategy(self, strategy_id: int) -> Dict[str, Any]:
         """激活策略"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 stmt = update(Strategy).where(
                     Strategy.id == strategy_id
                 ).values(
@@ -499,7 +521,7 @@ class StrategyManager:
                     updated_at=datetime.now()
                 )
                 
-                result = await db.execute(stmt)
+                result = db.execute(stmt)
                 if result.rowcount == 0:
                     return {
                         "success": False,
@@ -507,7 +529,7 @@ class StrategyManager:
                         "data": None
                     }
                 
-                await db.commit()
+                db.commit()
                 
                 logger.info(f"激活策略: {strategy_id}")
                 return {
@@ -515,6 +537,8 @@ class StrategyManager:
                     "message": "策略激活成功",
                     "data": None
                 }
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"激活策略失败: {e}, {traceback.format_exc()}")
@@ -527,7 +551,9 @@ class StrategyManager:
     async def deactivate_strategy(self, strategy_id: int) -> Dict[str, Any]:
         """停用策略"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 stmt = update(Strategy).where(
                     Strategy.id == strategy_id
                 ).values(
@@ -535,7 +561,7 @@ class StrategyManager:
                     updated_at=datetime.now()
                 )
                 
-                result = await db.execute(stmt)
+                result = db.execute(stmt)
                 if result.rowcount == 0:
                     return {
                         "success": False,
@@ -543,7 +569,7 @@ class StrategyManager:
                         "data": None
                     }
                 
-                await db.commit()
+                db.commit()
                 
                 logger.info(f"停用策略: {strategy_id}")
                 return {
@@ -551,6 +577,8 @@ class StrategyManager:
                     "message": "策略停用成功",
                     "data": None
                 }
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"停用策略失败: {e}, {traceback.format_exc()}")

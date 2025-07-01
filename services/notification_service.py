@@ -400,13 +400,15 @@ class NotificationService:
                                      notification_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """获取通知历史"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 query = select(NotificationLog).order_by(NotificationLog.created_at.desc()).limit(limit)
                 
                 if notification_type:
                     query = query.where(NotificationLog.notification_type == notification_type)
                 
-                result = await db.execute(query)
+                result = db.execute(query)
                 logs = result.scalars().all()
                 
                 return [
@@ -422,6 +424,8 @@ class NotificationService:
                     }
                     for log in logs
                 ]
+            finally:
+                db.close()
         except Exception as e:
             logger.error(f"获取通知历史失败: {e}, {traceback.format_exc()}")
             return []

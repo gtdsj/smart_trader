@@ -27,15 +27,15 @@ class DatabaseConfig(BaseModel):
     password: str = Field(default="password", description="数据库密码")
     database: str = Field(default="smart_trader", description="数据库名称")
     # DuckDB配置
-    memory: bool = Field(default=True, description="是否使用内存数据库")
+    memory: bool = Field(default=False, description="是否使用内存数据库")
     path: str = Field(default="data/smart_trader.db", description="数据库文件路径")
     
     @property
     def url(self) -> str:
         if self.memory:
-            return "sqlite:///:memory:"
+            return "duckdb:///:memory:"
         else:
-            return f"sqlite:///{self.path}"
+            return f"duckdb:///{self.path}"
 
 
 # Redis配置已移除，使用本地缓存替代
@@ -47,6 +47,7 @@ class XtQuantConfig(BaseModel):
     session_id: int = Field(default=123456, description="会话编号")
     account_id: str = Field(default="1000000365", description="资金账号")
     account_type: str = Field(default="STOCK", description="账号类型")
+    mock_mode: bool = Field(default=False, description="是否使用模拟模式")
 
 
 class DingTalkConfig(BaseModel):
@@ -85,6 +86,7 @@ class SystemConfig(BaseModel):
     log_dir: str = Field(default="logs", description="日志文件目录")
     log_file_prefix: str = Field(default="app", description="日志文件前缀")
     max_log_files: int = Field(default=30, description="最大日志文件数", ge=1, le=365)
+    simulation_mode: bool = Field(default=False, description="是否启用模拟模式")
     
     # API配置
     api_host: str = Field(default="0.0.0.0", description="API主机")

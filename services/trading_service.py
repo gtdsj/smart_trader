@@ -251,11 +251,13 @@ class TradingService:
     async def _get_positions_from_db(self) -> List[Dict[str, Any]]:
         """从数据库获取持仓信息"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 query = select(Position).where(
                     Position.account_id == self.settings.xtquant.account_id
                 )
-                result = await db.execute(query)
+                result = db.execute(query)
                 db_positions = result.scalars().all()
                 
                 positions = []
@@ -268,8 +270,10 @@ class TradingService:
                         "market_value": pos.market_value,
                         "profit_loss": pos.profit_loss
                     })
-                break
-            return positions
+                
+                return positions
+            finally:
+                db.close()
         except Exception as db_e:
             logger.error(f"从数据库获取持仓失败: {db_e}, {traceback.format_exc()}")
             return []
@@ -301,7 +305,9 @@ class TradingService:
             
             # 从数据库查询历史订单
             db_orders = []
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 query = select(TradingOrder)
                 
                 if start_date:
@@ -311,7 +317,7 @@ class TradingService:
                 
                 query = query.order_by(desc(TradingOrder.created_at))
                 
-                result = await db.execute(query)
+                result = db.execute(query)
                 db_order_records = result.scalars().all()
                 
                 for order in db_order_records:
@@ -328,7 +334,8 @@ class TradingService:
                         "created_at": order.created_at.isoformat() if order.created_at else None,
                         "updated_at": order.updated_at.isoformat() if order.updated_at else None
                     })
-                break
+            finally:
+                db.close()
             
             # 合并XtQuant订单和数据库订单，去重
             all_orders = xt_orders + db_orders
@@ -418,7 +425,9 @@ class TradingService:
                          strategy_name: str, remark: str):
         """保存订单到数据库"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 order_data = {
                     "order_id": order_id,
                     "stock_code": stock_code,
@@ -434,9 +443,10 @@ class TradingService:
                 }
                 
                 stmt = insert(TradingOrder).values(**order_data)
-                await db.execute(stmt)
-                await db.commit()
-                break
+                db.execute(stmt)
+                db.commit()
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"处理成交回报失败: {e}, {traceback.format_exc()}")
@@ -445,7 +455,9 @@ class TradingService:
                                   traded_volume: int = 0):
         """更新订单状态"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 stmt = update(TradingOrder).where(
                     TradingOrder.order_id == order_id
                 ).values(
@@ -454,9 +466,10 @@ class TradingService:
                     updated_at=datetime.now()
                 )
                 
-                await db.execute(stmt)
-                await db.commit()
-                break
+                db.execute(stmt)
+                db.commit()
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"更新订单状态失败: {e}, {traceback.format_exc()}")

@@ -1,0 +1,52 @@
+2025-07-01 23:20:20 | INFO     | main:lifespan:45 - 启动 My Trading Bot v2.0.0
+2025-07-01 23:20:20 | INFO     | main:lifespan:49 - 数据库初始化完成
+2025-07-01 23:20:20 | INFO     | core.cache_adapter:connect:25 - 使用本地缓存
+2025-07-01 23:20:20 | INFO     | main:lifespan:53 - 缓存初始化完成
+2025-07-01 23:20:20 | INFO     | main:lifespan:56 - 开始初始化XtQuant服务...
+2025-07-01 23:20:20 | INFO     | services.xtquant_service:__init__:161 - XtQuantService实例创建，分配session_id: 123457
+2025-07-01 23:20:20 | INFO     | main:lifespan:58 - XtQuant服务初始化完成
+2025-07-01 23:20:20 | INFO     | main:lifespan:60 - 开始初始化通知服务...
+2025-07-01 23:20:20 | INFO     | main:lifespan:62 - 通知服务初始化完成
+2025-07-01 23:20:20 | INFO     | main:lifespan:64 - 开始初始化交易服务...
+2025-07-01 23:20:20 | INFO     | main:lifespan:66 - 交易服务初始化完成
+2025-07-01 23:20:20 | INFO     | main:lifespan:68 - 开始初始化数据服务...
+2025-07-01 23:20:20 | INFO     | services.data_service:start:110 - 启动数据服务...
+2025-07-01 23:20:20 | INFO     | services.data_service:init_db:90 - DuckDB表创建完成
+2025-07-01 23:20:20 | INFO     | services.data_service:_init_database:98 - DuckDB数据库异步初始化成功
+2025-07-01 23:20:20 | INFO     | services.data_service:start:115 - 数据库初始化完成
+2025-07-01 23:20:20 | INFO     | services.xtquant_service:start:196 - XtQuant服务启动中...
+2025-07-01 23:20:20 | INFO     | services.xtquant_service:_init_data_connection:260 - XtQuant数据连接成功
+2025-07-01 23:20:21 | INFO     | services.xtquant_service:_init_trading_connection:306 - XtQuant交易连接成功, is_trading_connected: True
+2025-07-01 23:20:21 | INFO     | services.xtquant_service:start:208 - XtQuant服务启动完成
+2025-07-01 23:20:21 | INFO     | services.data_service:start:122 - XtQuant数据服务启动成功
+2025-07-01 23:20:21 | INFO     | services.data_service:start:133 - 数据服务启动成功
+2025-07-01 23:20:21 | INFO     | main:lifespan:71 - 数据服务初始化完成
+2025-07-01 23:20:21 | INFO     | main:lifespan:73 - 开始初始化策略服务...
+2025-07-01 23:20:21 | INFO     | main:lifespan:75 - 策略服务初始化完成
+2025-07-01 23:20:21 | INFO     | main:lifespan:78 - 开始初始化回测服务...
+2025-07-01 23:20:21 | INFO     | main:lifespan:80 - 回测服务初始化完成
+2025-07-01 23:20:21 | INFO     | main:lifespan:82 - 开始初始化策略管理器...
+2025-07-01 23:20:21 | INFO     | main:lifespan:84 - 策略管理器初始化完成
+2025-07-01 23:20:21 | INFO     | main:lifespan:86 - 开始初始化策略执行器...
+2025-07-01 23:20:21 | INFO     | main:lifespan:88 - 策略执行器初始化完成
+2025-07-01 23:20:21 | INFO     | main:lifespan:91 - 开始初始化调度器服务...
+2025-07-01 23:20:21 | INFO     | main:lifespan:94 - 调度器服务初始化完成
+2025-07-01 23:20:21 | INFO     | main:lifespan:121 - 所有服务启动完成
+2025-07-01 23:20:23 | INFO     | services.data_service:delayed_start_loop:138 - 准备启动数据更新循环...
+2025-07-01 23:20:23 | INFO     | services.data_service:delayed_start_loop:140 - 数据更新循环任务已创建
+2025-07-01 23:20:23 | INFO     | services.data_service:_data_update_loop:176 - 数据更新循环开始运行
+2025-07-01 23:20:24 | INFO     | services.trading_service:get_account_asset:217 - 获取账户资产结果: {'total_asset': 232876.79, 'cash': 195956.79, 'market_value': 36920.0, 'frozen_cash': 0.0, 'available_cash': 0, 'profit_loss': 0, 'profit_loss_ratio': 0}
+2025-07-01 23:22:00 | INFO     | main:lifespan:131 - 开始停止所有服务...
+2025-07-01 23:22:00 | INFO     | main:lifespan:136 - 调度器服务已停止
+2025-07-01 23:22:00 | INFO     | services.data_service:stop:156 - 停止数据服务...
+2025-07-01 23:22:00 | INFO     | services.xtquant_service:stop:238 - XtQuant服务已停止
+2025-07-01 23:22:00 | INFO     | services.data_service:stop:169 - 数据服务已停止
+2025-07-01 23:22:00 | INFO     | main:lifespan:143 - 数据服务已停止
+2025-07-01 23:22:00 | INFO     | main:lifespan:150 - XtQuant服务已停止
+2025-07-01 23:22:00 | ERROR    | main:lifespan:159 - 停止回测服务失败: 'BacktestService' object has no attribute 'stop'
+2025-07-01 23:22:00 | ERROR    | main:lifespan:166 - 停止策略服务失败: 'StrategyService' object has no attribute 'stop'
+2025-07-01 23:22:00 | INFO     | main:lifespan:171 - 交易服务已停止
+2025-07-01 23:22:00 | ERROR    | main:lifespan:180 - 停止通知服务失败: 'NotificationService' object has no attribute 'stop'
+2025-07-01 23:22:00 | INFO     | main:lifespan:182 - 所有服务已停止
+2025-07-01 23:22:00 | INFO     | __main__:signal_handler:258 - 接收到信号 2，开始优雅关闭...
+2025-07-01 23:22:00 | INFO     | __main__:<module>:279 - 程序已退出

@@ -15,7 +15,7 @@ from sqlalchemy import select, insert, update, and_, desc
 from core.time_utils import TimeUtils
 
 from config import get_settings
-from core.database import get_db
+from core.database import get_db, StockData
 from core.cache_adapter import get_cache_client
 from core.duckdb_adapter import DuckDBAdapter
 from services.notification_service import NotificationService
@@ -33,10 +33,9 @@ class DataService:
         self.is_running = False
         self.data_update_task = None
         
-        # 初始化DuckDB适配器
-        db_path = self.settings.database.path if hasattr(self.settings.database, 'path') else 'data/smart_trader.db'
-        self.duckdb = DuckDBAdapter(db_path)
-        self._init_daily_data_table()
+        # 初始化DuckDB适配器（延迟到start方法中异步执行）
+        self.duckdb = None
+        self.db_initialized = False
         
         # 数据缓存配置
         self.cache_expire_time = 300  # 5分钟缓存过期
@@ -49,18 +48,98 @@ class DataService:
             "科创50": "000688.SH"
         }
     
+    async def _init_database(self):
+        """异步初始化数据库"""
+        if self.db_initialized:
+            return
+            
+        try:
+            # 在模拟模式下跳过数据库初始化
+            if self.settings.simulation_mode:
+                logger.info("模拟模式：跳过数据库初始化")
+                self.duckdb = None
+                self.db_initialized = True
+                return
+            
+            loop = asyncio.get_event_loop()
+            
+            # 在线程池中执行数据库初始化
+            def init_db():
+                # 初始化SQLAlchemy数据库表
+                from core.database import init_database, get_duckdb_connection
+                from core.duckdb_adapter import init_duckdb
+                init_database()
+                
+                # 使用SQLAlchemy的数据库连接
+                try:
+                    duckdb_conn = get_duckdb_connection()
+                    self.duckdb = DuckDBAdapter(connection=duckdb_conn)
+                except Exception as e:
+                    logger.warning(f"无法获取SQLAlchemy连接，使用独立连接: {e}")
+                    # 备选方案：使用独立的DuckDB连接
+                    if self.settings.database.memory:
+                        self.duckdb = DuckDBAdapter(':memory:')
+                    else:
+                        db_path = self.settings.database.path
+                        self.duckdb = DuckDBAdapter(db_path)
+                
+                # 确保DuckDB表已创建
+                try:
+                    from core.duckdb_adapter import _create_tables
+                    _create_tables(self.duckdb)
+                    logger.info("DuckDB表创建完成")
+                except Exception as e:
+                    logger.warning(f"DuckDB表创建失败: {e}")
+                
+                return True
+            
+            await loop.run_in_executor(None, init_db)
+            self.db_initialized = True
+            logger.info("DuckDB数据库异步初始化成功")
+            
+        except Exception as e:
+            logger.warning(f"DuckDB初始化失败: {e}，将使用模拟模式")
+            self.duckdb = None
+            self.db_initialized = False
+    
     async def start(self):
         """启动数据服务"""
+        if self.is_running:
+            return
+        
+        logger.info("启动数据服务...")
+        
         try:
-            logger.info("启动数据服务...")
+            # 异步初始化数据库
+            await self._init_database()
+            logger.info("数据库初始化完成")
             
-            # 启动XtQuant数据服务
-            await self.xtquant_service.start()
+            # 检查是否为模拟模式
+            if not self.settings.simulation_mode:
+                # 启动XtQuant数据服务（带超时）
+                try:
+                    await asyncio.wait_for(self.xtquant_service.start(), timeout=30.0)
+                    logger.info("XtQuant数据服务启动成功")
+                except asyncio.TimeoutError:
+                    logger.error("XtQuant数据服务启动超时")
+                    raise
+                except Exception as e:
+                    logger.error(f"XtQuant数据服务启动失败: {e}")
+                    raise
+            else:
+                logger.info("模拟模式：跳过XtQuant数据服务启动")
             
-            # 启动数据更新循环
-            self.data_update_task = asyncio.create_task(self._data_update_loop())
-            
+            self.is_running = True
             logger.info("数据服务启动成功")
+            
+            # 延迟启动数据更新循环
+            async def delayed_start_loop():
+                await asyncio.sleep(2)  # 等待2秒后启动
+                logger.info("准备启动数据更新循环...")
+                self.data_update_task = asyncio.create_task(self._data_update_loop())
+                logger.info("数据更新循环任务已创建")
+            
+            asyncio.create_task(delayed_start_loop())
             
         except Exception as e:
             logger.error(f"启动数据服务失败: {e}, {traceback.format_exc()}")
@@ -94,16 +173,28 @@ class DataService:
     
     async def _data_update_loop(self):
         """数据更新循环"""
+        logger.info("数据更新循环开始运行")
         while self.is_running:
             try:
+                logger.debug("数据更新循环：开始新的循环")
+                
+                # 检查是否为模拟模式
+                if self.settings.simulation_mode:
+                    logger.debug("模拟模式：跳过数据更新")
+                    await asyncio.sleep(60)  # 1分钟等待一次
+                    continue
+                
                 # 检查是否为交易时间
                 if self._is_trading_time():
+                    logger.debug("当前为交易时间，更新实时数据")
                     await self._update_realtime_data()
                 else:
                     # 非交易时间，更新历史数据
+                    logger.debug("当前为非交易时间，更新历史数据")
                     await self._update_historical_data()
                 
                 # 等待下次更新
+                logger.debug("数据更新完成，等待下次更新")
                 await asyncio.sleep(60)  # 1分钟更新一次
                 
             except Exception as e:
@@ -114,6 +205,7 @@ class DataService:
                     module="DataService"
                 )
                 await asyncio.sleep(60)
+        logger.info("数据更新循环已停止")
     
     def _is_trading_time(self) -> bool:
         """检查是否为交易时间"""
@@ -939,7 +1031,9 @@ class DataService:
     async def save_stock_data(self, stock_data: Dict[str, Any]):
         """保存股票数据到数据库"""
         try:
-            async for db in get_db():
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
                 # 检查数据是否已存在
                 existing_query = select(StockData).where(
                     and_(
@@ -947,7 +1041,7 @@ class DataService:
                         StockData.trade_date == stock_data["trade_date"]
                     )
                 )
-                result = await db.execute(existing_query)
+                result = db.execute(existing_query)
                 existing_data = result.scalar_one_or_none()
                 
                 if existing_data:
@@ -955,14 +1049,15 @@ class DataService:
                     update_stmt = update(StockData).where(
                         StockData.id == existing_data.id
                     ).values(**stock_data)
-                    await db.execute(update_stmt)
+                    db.execute(update_stmt)
                 else:
                     # 插入新数据
                     insert_stmt = insert(StockData).values(**stock_data)
-                    await db.execute(insert_stmt)
+                    db.execute(insert_stmt)
                 
-                await db.commit()
-                break
+                db.commit()
+            finally:
+                db.close()
                 
         except Exception as e:
             logger.error(f"保存股票数据失败: {e}, {traceback.format_exc()}")
@@ -1219,19 +1314,28 @@ class DataService:
     async def _get_stocks_need_update(self) -> List[str]:
         """获取需要更新的股票列表"""
         try:
-            async for db in get_db():
-                # 获取最近没有更新的股票
-                query = select(StockData.stock_code).distinct().order_by(
-                    desc(StockData.updated_at)
-                ).limit(100)
-                
-                result = await db.execute(query)
-                stocks = [row[0] for row in result.fetchall()]
-                
-                return stocks
+            # 使用DuckDB直接查询
+            sql = """
+            SELECT DISTINCT stock_code 
+            FROM stock_data 
+            ORDER BY updated_at DESC 
+            LIMIT 100
+            """
+            
+            result = await asyncio.get_event_loop().run_in_executor(
+                None, self.duckdb.fetchall, sql
+            )
+            
+            stocks = [row[0] for row in result] if result else []
+            return stocks
+            
         except Exception as e:
             logger.error(f"获取需要更新的股票列表失败: {e}, {traceback.format_exc()}")
-            return []
+            # 返回默认股票列表
+            return [
+                "000001.SZ", "000002.SZ", "600000.SH", "600036.SH",
+                "000858.SZ", "002415.SZ", "600519.SH", "300750.SZ"
+            ]
     
     async def add_watched_stock(self, stock_code: str) -> bool:
         """添加关注股票"""

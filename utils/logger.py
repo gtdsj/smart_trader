@@ -1,0 +1,69 @@
+"""日志工具模块"""
+
+import logging
+import sys
+from pathlib import Path
+from typing import Optional
+from loguru import logger as loguru_logger
+
+
+def get_logger(name: str, level: str = "INFO") -> logging.Logger:
+    """获取标准logger实例"""
+    logger = logging.getLogger(name)
+    
+    if not logger.handlers:
+        # 创建控制台处理器
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(getattr(logging, level.upper()))
+        
+        # 创建格式器
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        console_handler.setFormatter(formatter)
+        
+        # 添加处理器到logger
+        logger.addHandler(console_handler)
+        logger.setLevel(getattr(logging, level.upper()))
+    
+    return logger
+
+
+def setup_loguru_logger(
+    log_file: Optional[str] = None,
+    level: str = "INFO",
+    rotation: str = "10 MB",
+    retention: str = "7 days"
+):
+    """配置loguru日志器"""
+    # 移除默认处理器
+    loguru_logger.remove()
+    
+    # 添加控制台输出
+    loguru_logger.add(
+        sys.stdout,
+        level=level,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+    )
+    
+    # 如果指定了日志文件，添加文件输出
+    if log_file:
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        loguru_logger.add(
+            log_file,
+            level=level,
+            rotation=rotation,
+            retention=retention,
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
+        )
+    
+    return loguru_logger
+
+
+# 默认设置
+setup_loguru_logger(
+    log_file="logs/smart_trader.log",
+    level="INFO"
+)

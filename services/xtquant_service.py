@@ -160,6 +160,10 @@ class XtQuantService:
         self.session_id = self._get_next_session_id()
         logger.info(f"XtQuantService实例创建，分配session_id: {self.session_id}")
         
+        # 线程池执行器
+        from concurrent.futures import ThreadPoolExecutor
+        self.executor = ThreadPoolExecutor(max_workers=4)
+        
         # 交易相关
         self.xt_trader = None
         self.account = None
@@ -193,8 +197,7 @@ class XtQuantService:
         
         try:
             if xtdata is None or XtQuantTrader is None:
-                logger.warning("xtquant未安装，使用模拟模式")
-                return
+                raise Exception("xtquant未安装，无法启动真实连接")
             
             # 初始化数据连接
             await self._init_data_connection()
@@ -208,9 +211,10 @@ class XtQuantService:
             logger.error(f"XtQuant服务启动失败: {e}, {traceback.format_exc()}")
             await self.notification_service.send_system_error_notification(
                 error_type="XtQuant服务启动失败",
-                error_message=str(e),
+                error_message=f"XtQuant服务启动失败: {str(e)}",
                 module="XtQuantService"
             )
+            raise
     
     async def stop(self):
         """停止XtQuant服务"""
@@ -238,66 +242,68 @@ class XtQuantService:
     
     async def _init_data_connection(self):
         """初始化数据连接"""
-        try:
-            if xtdata is None:
-                return
-            
-            # 连接数据服务器
-            connect_result = xtdata.connect()
-            if not connect_result:
-                raise Exception("连接xtdata失败")
-            
-            # 创建数据回调
-            self.data_callback = XtQuantDataCallback(self)
-            self.is_data_connected = True
-            
-            logger.info("XtQuant数据连接成功")
-            
-        except Exception as e:
-            logger.error(f"初始化数据连接失败: {e}, {traceback.format_exc()}")
-            raise
+        if xtdata is None:
+            raise Exception("xtquant数据模块未安装，无法连接数据服务")
+        
+        # 在线程池中连接数据服务器
+        loop = asyncio.get_event_loop()
+        connect_result = await loop.run_in_executor(
+            self.executor, xtdata.connect
+        )
+        if not connect_result:
+            raise Exception("连接xtdata失败")
+        
+        # 创建数据回调
+        self.data_callback = XtQuantDataCallback(self)
+        self.is_data_connected = True
+        
+        logger.info("XtQuant数据连接成功")
     
     async def _init_trading_connection(self):
         """初始化交易连接"""
-        try:
-            if XtQuantTrader is None:
-                return
-            
-            # 创建交易对象，使用实例特有的session_id
-            self.xt_trader = XtQuantTrader(
-                path=self.settings.xtquant.path,
-                session=self.session_id
-            )
-            
-            # 创建账户对象
-            self.account = StockAccount(
-                account_id=self.settings.xtquant.account_id,
-                account_type=self.settings.xtquant.account_type
-            )
-            
-            # 创建交易回调
-            self.trading_callback = XtQuantTradingCallback(self)
-            self.xt_trader.register_callback(self.trading_callback)
-            
-            # 启动交易线程
-            self.xt_trader.start()
-            
-            # 建立连接
-            connect_result = self.xt_trader.connect()
-            if connect_result != 0:
-                raise Exception(f"连接交易服务器失败，错误码: {connect_result}")
-            
-            # 订阅回调
-            subscribe_result = self.xt_trader.subscribe(self.account)
-            if subscribe_result != 0:
-                raise Exception(f"订阅交易回调失败，错误码: {subscribe_result}")
-            
-            self.is_trading_connected = True
-            logger.info("XtQuant交易连接成功, is_trading_connected: " + str(self.is_trading_connected))
-            
-        except Exception as e:
-            logger.error(f"初始化交易连接失败: {e}, {traceback.format_exc()}")
-            raise
+        if XtQuantTrader is None:
+            raise Exception("xtquant交易模块未安装，无法连接交易服务")
+        
+        # 创建交易对象，使用实例特有的session_id
+        self.xt_trader = XtQuantTrader(
+            path=self.settings.xtquant.path,
+            session=self.session_id
+        )
+        
+        # 创建账户对象
+        self.account = StockAccount(
+            account_id=self.settings.xtquant.account_id,
+            account_type=self.settings.xtquant.account_type
+        )
+        
+        # 创建交易回调
+        self.trading_callback = XtQuantTradingCallback(self)
+        self.xt_trader.register_callback(self.trading_callback)
+        
+        # 在线程池中启动交易线程
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(self.executor, self.xt_trader.start)
+        
+        # 在线程池中建立连接
+        connect_result = await loop.run_in_executor(
+            self.executor, self.xt_trader.connect
+        )
+        if connect_result != 0:
+            logger.warning(f"连接交易服务器失败，错误码: {connect_result}，可能QMT客户端未启动")
+            self.is_trading_connected = False
+            return
+        
+        # 在线程池中订阅回调
+        subscribe_result = await loop.run_in_executor(
+            self.executor, self.xt_trader.subscribe, self.account
+        )
+        if subscribe_result != 0:
+            logger.warning(f"订阅交易回调失败，错误码: {subscribe_result}")
+            self.is_trading_connected = False
+            return
+        
+        self.is_trading_connected = True
+        logger.info("XtQuant交易连接成功, is_trading_connected: " + str(self.is_trading_connected))
     
     # ==================== 数据获取功能 ====================
     
@@ -514,46 +520,58 @@ class XtQuantService:
     async def get_realtime_data(self, stock_codes: List[str]) -> Dict[str, Dict[str, Any]]:
         """获取实时数据"""
         try:
-            if xtdata is None:
-                raise Exception("XtQuant数据服务未连接，无法获取实时数据")
+            # 检查是否为模拟模式
+            if self.settings.xtquant.mock_mode or xtdata is None or not self.is_data_connected:
+                logger.info("使用模拟实时数据")
+                return await self._get_mock_realtime_data(stock_codes)
             
-            result = {}
+            # 在线程池中执行同步调用以避免阻塞
+            import asyncio
+            import concurrent.futures
             
-            for stock_code in stock_codes:
-                try:
-                    # 获取实时行情
-                    quote = xtdata.get_full_tick([stock_code])
-                    if quote and stock_code in quote:
-                        tick_data = quote[stock_code]
-                        result[stock_code] = {
-                            "stock_code": stock_code,
-                            "last_price": tick_data.get("lastPrice", 0),
-                            "open": tick_data.get("open", 0),
-                            "high": tick_data.get("high", 0),
-                            "low": tick_data.get("low", 0),
-                            "pre_close": tick_data.get("lastClose", 0),
-                            "volume": tick_data.get("volume", 0),
-                            "amount": tick_data.get("amount", 0),
-                            "bid1": tick_data.get("bidPrice", [0])[0] if tick_data.get("bidPrice") else 0,
-                            "ask1": tick_data.get("askPrice", [0])[0] if tick_data.get("askPrice") else 0,
-                            "bid1_volume": tick_data.get("bidVol", [0])[0] if tick_data.get("bidVol") else 0,
-                            "ask1_volume": tick_data.get("askVol", [0])[0] if tick_data.get("askVol") else 0,
-                            "timestamp": datetime.now().isoformat()
-                        }
+            def get_tick_data():
+                result = {}
+                for stock_code in stock_codes:
+                    try:
+                        # 获取实时行情
+                        quote = xtdata.get_full_tick([stock_code])
+                        if quote and stock_code in quote:
+                            tick_data = quote[stock_code]
+                            result[stock_code] = {
+                                "stock_code": stock_code,
+                                "last_price": tick_data.get("lastPrice", 0),
+                                "open": tick_data.get("open", 0),
+                                "high": tick_data.get("high", 0),
+                                "low": tick_data.get("low", 0),
+                                "pre_close": tick_data.get("lastClose", 0),
+                                "volume": tick_data.get("volume", 0),
+                                "amount": tick_data.get("amount", 0),
+                                "bid1": tick_data.get("bidPrice", [0])[0] if tick_data.get("bidPrice") else 0,
+                                "ask1": tick_data.get("askPrice", [0])[0] if tick_data.get("askPrice") else 0,
+                                "bid1_volume": tick_data.get("bidVol", [0])[0] if tick_data.get("bidVol") else 0,
+                                "ask1_volume": tick_data.get("askVol", [0])[0] if tick_data.get("askVol") else 0,
+                                "timestamp": datetime.now().isoformat()
+                            }
+                            
+                            # 计算涨跌幅
+                            if result[stock_code]["pre_close"] > 0:
+                                change = result[stock_code]["last_price"] - result[stock_code]["pre_close"]
+                                change_ratio = change / result[stock_code]["pre_close"]
+                                result[stock_code]["change"] = change
+                                result[stock_code]["change_ratio"] = change_ratio
+                            else:
+                                result[stock_code]["change"] = 0
+                                result[stock_code]["change_ratio"] = 0
                         
-                        # 计算涨跌幅
-                        if result[stock_code]["pre_close"] > 0:
-                            change = result[stock_code]["last_price"] - result[stock_code]["pre_close"]
-                            change_ratio = change / result[stock_code]["pre_close"]
-                            result[stock_code]["change"] = change
-                            result[stock_code]["change_ratio"] = change_ratio
-                        else:
-                            result[stock_code]["change"] = 0
-                            result[stock_code]["change_ratio"] = 0
-                    
-                except Exception as e:
-                    logger.error(f"获取{stock_code}实时数据失败: {e}, {traceback.format_exc()}")
-                    continue
+                    except Exception as e:
+                        logger.error(f"获取{stock_code}实时数据失败: {e}")
+                        continue
+                return result
+            
+            # 在线程池中执行
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                result = await loop.run_in_executor(executor, get_tick_data)
             
             return result
             
@@ -561,8 +579,150 @@ class XtQuantService:
             logger.error(f"获取实时数据失败: {e}, {traceback.format_exc()}")
             return {}
     
+    async def _get_mock_realtime_data(self, stock_codes: List[str]) -> Dict[str, Dict[str, Any]]:
+        """获取模拟实时数据"""
+        import random
+        result = {}
+        
+        for stock_code in stock_codes:
+            # 生成模拟数据
+            base_price = 10.0 + random.uniform(-5, 5)
+            change_ratio = random.uniform(-0.05, 0.05)  # -5%到5%的涨跌幅
+            current_price = base_price * (1 + change_ratio)
+            
+            result[stock_code] = {
+                "stock_code": stock_code,
+                "last_price": round(current_price, 2),
+                "open": round(base_price * (1 + random.uniform(-0.02, 0.02)), 2),
+                "high": round(current_price * (1 + random.uniform(0, 0.03)), 2),
+                "low": round(current_price * (1 - random.uniform(0, 0.03)), 2),
+                "pre_close": round(base_price, 2),
+                "volume": random.randint(100000, 1000000),
+                "amount": random.randint(1000000, 10000000),
+                "bid1": round(current_price * 0.999, 2),
+                "ask1": round(current_price * 1.001, 2),
+                "bid1_volume": random.randint(100, 1000),
+                "ask1_volume": random.randint(100, 1000),
+                "change": round(current_price - base_price, 2),
+                "change_ratio": round(change_ratio, 4),
+                "timestamp": datetime.now().isoformat()
+            }
+        
+        return result
+    
+    async def get_historical_data(self, stock_code: str, start_date: str, 
+                                end_date: str, period: str = "1d") -> Dict[str, Any]:
+        """获取历史数据"""
+        try:
+            # 检查是否为模拟模式
+            if self.settings.xtquant.mock_mode or xtdata is None or not self.data_connected:
+                logger.info("使用模拟历史数据")
+                return await self._get_mock_historical_data(stock_code, start_date, end_date, period)
+            
+            # 在线程池中执行同步调用以避免阻塞
+            import asyncio
+            import concurrent.futures
+            
+            def get_history_data():
+                try:
+                    # 转换周期参数
+                    period_map = {
+                        "1d": "1d",
+                        "1m": "1m",
+                        "5m": "5m",
+                        "15m": "15m",
+                        "30m": "30m",
+                        "60m": "1h"
+                    }
+                    xt_period = period_map.get(period, "1d")
+                    
+                    # 获取历史数据
+                    df = xtdata.get_market_data(
+                        stock_list=[stock_code],
+                        period=xt_period,
+                        start_time=start_date,
+                        end_time=end_date
+                    )
+                    
+                    if df is not None and not df.empty:
+                        # 转换为标准格式
+                        data = []
+                        for index, row in df.iterrows():
+                            data.append({
+                                "trade_date": index.strftime("%Y-%m-%d") if hasattr(index, 'strftime') else str(index),
+                                "open_price": float(row.get("open", 0)),
+                                "high_price": float(row.get("high", 0)),
+                                "low_price": float(row.get("low", 0)),
+                                "close_price": float(row.get("close", 0)),
+                                "volume": int(row.get("volume", 0)),
+                                "amount": float(row.get("amount", 0))
+                            })
+                        
+                        return {"success": True, "data": data}
+                    else:
+                        return {"success": False, "error": "未获取到数据"}
+                        
+                except Exception as e:
+                    logger.error(f"获取历史数据失败: {e}")
+                    return {"success": False, "error": str(e)}
+            
+            # 在线程池中执行
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                result = await loop.run_in_executor(executor, get_history_data)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"获取历史数据失败: {e}, {traceback.format_exc()}")
+            return {"success": False, "error": str(e)}
+    
+    async def _get_mock_historical_data(self, stock_code: str, start_date: str, 
+                                      end_date: str, period: str = "1d") -> Dict[str, Any]:
+        """获取模拟历史数据"""
+        import random
+        from datetime import datetime, timedelta
+        
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            
+            data = []
+            current_dt = start_dt
+            base_price = 10.0 + random.uniform(-5, 5)
+            
+            while current_dt <= end_dt:
+                # 跳过周末
+                if current_dt.weekday() < 5:
+                    # 生成模拟价格数据
+                    change_ratio = random.uniform(-0.03, 0.03)
+                    open_price = base_price * (1 + random.uniform(-0.01, 0.01))
+                    close_price = base_price * (1 + change_ratio)
+                    high_price = max(open_price, close_price) * (1 + random.uniform(0, 0.02))
+                    low_price = min(open_price, close_price) * (1 - random.uniform(0, 0.02))
+                    
+                    data.append({
+                        "trade_date": current_dt.strftime("%Y-%m-%d"),
+                        "open_price": round(open_price, 2),
+                        "high_price": round(high_price, 2),
+                        "low_price": round(low_price, 2),
+                        "close_price": round(close_price, 2),
+                        "volume": random.randint(100000, 1000000),
+                        "amount": random.randint(1000000, 10000000)
+                    })
+                    
+                    base_price = close_price  # 下一天的基准价格
+                
+                current_dt += timedelta(days=1)
+            
+            return {"success": True, "data": data}
+            
+        except Exception as e:
+            logger.error(f"生成模拟历史数据失败: {e}")
+            return {"success": False, "error": str(e)}
+    
     async def subscribe_realtime_data(self, stock_codes: List[str], 
-                                    callback: Optional[Callable] = None):
+                                     callback: Optional[Callable] = None):
         """订阅实时数据"""
         try:
             if xtdata is None:
