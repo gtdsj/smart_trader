@@ -562,17 +562,22 @@ class OptimizedBackfillService:
     
     async def _get_stock_list(self, market: str = 'ALL') -> List[str]:
         """
-        获取股票列表
+        获取股票列表 - 调用xtquant真实API
         """
         try:
-            # 这里应该调用实际的股票列表获取方法
-            # 简化实现，返回示例股票代码
-            if market == 'SH':
-                return ['600000.SH', '600036.SH', '600519.SH']  # 示例沪市股票
-            elif market == 'SZ':
-                return ['000001.SZ', '000002.SZ', '300059.SZ']  # 示例深市股票
-            else:
-                return ['600000.SH', '600036.SH', '600519.SH', '000001.SZ', '000002.SZ', '300059.SZ']
+            # 调用xtquant服务获取真实股票列表
+            stock_list_data = await self.xtquant_service.get_stock_list(market)
+            
+            # 提取股票代码
+            stock_codes = []
+            for stock_info in stock_list_data:
+                if isinstance(stock_info, dict) and 'stock_code' in stock_info:
+                    stock_codes.append(stock_info['stock_code'])
+                elif isinstance(stock_info, str):
+                    stock_codes.append(stock_info)
+            
+            logger.info(f"从xtquant获取到{len(stock_codes)}只{market}市场股票")
+            return stock_codes
         except Exception as e:
             logger.error(f"获取股票列表失败: {e}")
             return []
