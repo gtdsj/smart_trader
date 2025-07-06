@@ -120,9 +120,9 @@ async def get_trading_service_status(service: TradingService = Depends(get_tradi
     """获取交易服务状态"""
     try:
         status = {
-            "is_connected": service.is_connected,
-            "account_id": service.account.account_id if service.account else None,
-            "last_heartbeat": service.last_heartbeat.isoformat() if service.last_heartbeat else None,
+            "is_connected": service.connected,
+            "account_id": service.xtquant_service.account.account_id if service.xtquant_service.account else None,
+            # "last_heartbeat": service.last_heartbeat.isoformat() if service.last_heartbeat else None,
             "total_orders": len(service.orders),
             "simulation_mode": not service.xt_trader
         }
