@@ -12,7 +12,7 @@ from enum import Enum
 import json
 from croniter import croniter
 
-# from utils.logger import logger  # 使用简单的print替代
+from loguru import logger
 from services.notification_service import NotificationService, NotificationType, NotificationLevel
 from strategies.custom_stock_selection import CustomStockSelectionStrategy
 from services.data_service import DataService
@@ -63,7 +63,7 @@ class ScheduledTask:
             cron = croniter(self.cron_expression, datetime.now())
             self.next_run_time = cron.get_next(datetime)
         except Exception as e:
-            print(f"[ERROR] 更新任务{self.task_id}下次执行时间失败: {e}")
+            logger.error(f"更新任务{self.task_id}下次执行时间失败: {e}")
             self.next_run_time = None
 
 
@@ -87,12 +87,12 @@ class SchedulerService:
     async def start(self):
         """启动调度器"""
         if self.is_running:
-            print("[WARNING] 调度器已在运行中")
+            logger.warning("调度器已在运行中")
             return
             
         self.is_running = True
         self._scheduler_task = asyncio.create_task(self._scheduler_loop())
-        print("[INFO] 定时任务调度器已启动")
+        logger.info("定时任务调度器已启动")
         
     async def stop(self):
         """停止调度器"""
@@ -118,7 +118,7 @@ class SchedulerService:
                 pass
                 
         self.running_tasks.clear()
-        print("[INFO] 定时任务调度器已停止")
+        logger.info("定时任务调度器已停止")
         
     def add_task(self, task: ScheduledTask) -> bool:
         """
@@ -135,11 +135,11 @@ class SchedulerService:
             croniter(task.cron_expression)
             
             self.tasks[task.task_id] = task
-            print(f"[INFO] 添加定时任务: {task.name} ({task.task_id})")
+            logger.info(f"添加定时任务: {task.name} ({task.task_id})")
             return True
             
         except Exception as e:
-            print(f"[ERROR] 添加定时任务失败: {e}")
+            logger.error(f"添加定时任务失败: {e}")
             return False
             
     def remove_task(self, task_id: str) -> bool:
@@ -160,14 +160,14 @@ class SchedulerService:
                     del self.running_tasks[task_id]
                     
                 del self.tasks[task_id]
-                print(f"[INFO] 移除定时任务: {task_id}")
+                logger.info(f"移除定时任务: {task_id}")
                 return True
             else:
-                print(f"[WARNING] 任务{task_id}不存在")
+                logger.warning(f"任务{task_id}不存在")
                 return False
                 
         except Exception as e:
-            print(f"[ERROR] 移除定时任务失败: {e}")
+            logger.error(f"移除定时任务失败: {e}")
             return False
             
     def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
@@ -219,11 +219,11 @@ class SchedulerService:
             是否启动成功
         """
         if task_id not in self.tasks:
-            print(f"[ERROR] 任务{task_id}不存在")
+            logger.error(f"任务{task_id}不存在")
             return False
             
         if task_id in self.running_tasks:
-            print(f"[WARNING] 任务{task_id}正在运行中")
+            logger.warning(f"任务{task_id}正在运行中")
             return False
             
         task = self.tasks[task_id]
@@ -231,12 +231,12 @@ class SchedulerService:
             self._execute_task(task)
         )
         
-        print(f"[INFO] 手动执行任务: {task.name}")
+        logger.info(f"手动执行任务: {task.name}")
         return True
         
     async def _scheduler_loop(self):
         """调度器主循环"""
-        print("[INFO] 调度器主循环已启动")
+        logger.info("调度器主循环已启动")
         
         while self.is_running:
             try:
@@ -272,7 +272,7 @@ class SchedulerService:
                 await asyncio.sleep(60)
                 
             except Exception as e:
-                print(f"[ERROR] 调度器循环出错: {e}")
+                logger.error(f"调度器循环出错: {e}")
                 await asyncio.sleep(60)
                 
     async def _execute_task(self, task: ScheduledTask):
@@ -286,14 +286,14 @@ class SchedulerService:
         task.last_run_time = datetime.now()
         task.error_message = None
         
-        print(f"[INFO] 开始执行任务: {task.name}")
+        logger.info(f"开始执行任务: {task.name}")
         
         try:
             # 执行任务函数
             result = await task.task_function(**task.task_params)
             
             task.status = TaskStatus.COMPLETED
-            print(f"[INFO] 任务执行完成: {task.name}")
+            logger.info(f"任务执行完成: {task.name}")
             
             # 发送成功通知
             if task.task_type == TaskType.STOCK_SELECTION:
@@ -302,7 +302,7 @@ class SchedulerService:
         except Exception as e:
             task.status = TaskStatus.FAILED
             task.error_message = str(e)
-            print(f"[ERROR] 任务执行失败: {task.name}, 错误: {e}")
+            logger.error(f"任务执行失败: {task.name}, 错误: {e}")
             
             # 发送失败通知
             await self._send_task_failure_notification(task, e)
@@ -344,7 +344,7 @@ class SchedulerService:
             )
             
         except Exception as e:
-            print(f"[ERROR] 发送选股通知失败: {e}")
+            logger.error(f"发送选股通知失败: {e}")
             
     async def _send_task_failure_notification(self, task: ScheduledTask, error: Exception):
         """
@@ -369,7 +369,7 @@ class SchedulerService:
             )
             
         except Exception as e:
-            print(f"[ERROR] 发送任务失败通知失败: {e}")
+            logger.error(f"发送任务失败通知失败: {e}")
             
     def _register_default_tasks(self):
         """
