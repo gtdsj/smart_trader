@@ -11,7 +11,7 @@
   "simulation_mode": false,
   "database": {
     "type": "duckdb",
-    "path": "data/smart_trader.db",
+    "path": "D:\\smart_trader\\data\\smart_trader.db",
     "memory": false
   },
   "xtquant": {

@@ -1,7 +1,9 @@
 """日志工具模块"""
 
+import os
 import logging
 import sys
+from config import get_settings
 from pathlib import Path
 from typing import Optional
 from loguru import logger as loguru_logger
@@ -63,7 +65,8 @@ def setup_loguru_logger(
 
 
 # 默认设置
+settings = get_settings()
 setup_loguru_logger(
-    log_file="logs/smart_trader.log",
+    log_file= os.path.join(settings.log_dir, f"{settings.log_file_prefix}_{{time:YYYY-MM-DD}}.log"),
     level="INFO"
 )
