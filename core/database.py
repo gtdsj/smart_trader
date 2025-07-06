@@ -364,6 +364,7 @@ class StrategyExecution(Base):
     status = Column(String(20), nullable=False)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime)
+    execution_time = Column(Float, comment="执行时间（秒）")
     total_stocks = Column(Integer, default=0)
     signal_count = Column(Integer, default=0)
     success_rate = Column(Float)

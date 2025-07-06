@@ -22,6 +22,8 @@ from core.database import (
 from core.cache_adapter import get_cache_client
 from services.data_service import DataService
 from services.strategy_manager import StrategyManager, SignalType, ExecutionStatus
+from services.indicator_manager import IndicatorManager
+from services.operator_manager import OperatorManager
 
 
 class StrategyExecutor:
@@ -32,6 +34,8 @@ class StrategyExecutor:
         self.cache_client = get_cache_client()
         self.data_service = None  # 延迟初始化
         self.strategy_manager = None  # 延迟初始化
+        self.indicator_manager = IndicatorManager()
+        self.operator_manager = OperatorManager()
         
         # 技术指标计算函数映射
         self.technical_calculators = {
@@ -263,9 +267,24 @@ class StrategyExecutor:
         for condition in conditions:
             if condition["condition_type"] == "technical":
                 indicator = condition["indicator"]
-                if indicator in self.technical_calculators:
-                    calculator = self.technical_calculators[indicator]
-                    df = calculator(df, condition["value"])
+                try:
+                    # 使用指标管理器计算指标
+                    result = self.indicator_manager.calculate_indicator(indicator, df, condition.get("value", {}))
+                    if result["success"]:
+                        # 将计算结果合并到DataFrame中
+                        if isinstance(result["data"], pd.DataFrame):
+                            df = result["data"]
+                        elif isinstance(result["data"], dict):
+                            for col_name, values in result["data"].items():
+                                df[col_name] = values
+                    else:
+                        logger.warning(f"计算指标{indicator}失败: {result['message']}")
+                except Exception as e:
+                    logger.error(f"计算指标{indicator}异常: {e}")
+                    # 回退到原有计算方法
+                    if indicator in self.technical_calculators:
+                        calculator = self.technical_calculators[indicator]
+                        df = calculator(df, condition["value"])
         
         return df
     
@@ -388,15 +407,19 @@ class StrategyExecutor:
                 "description": f"指标{indicator}不存在"
             }
         
-        # 评估条件
-        operator_func = self.operators.get(operator)
-        if not operator_func:
-            return {
-                "result": False,
-                "description": f"操作符{operator}不支持"
-            }
-        
-        result = operator_func(indicator_value, value)
+        # 使用操作符管理器评估条件
+        try:
+            result = self.operator_manager.evaluate_condition(indicator_value, operator, value)
+        except Exception as e:
+            logger.error(f"评估条件失败: {e}")
+            # 回退到原有方法
+            operator_func = self.operators.get(operator)
+            if not operator_func:
+                return {
+                    "result": False,
+                    "description": f"操作符{operator}不支持"
+                }
+            result = operator_func(indicator_value, value)
         
         # 生成描述
         description = self._generate_condition_description(

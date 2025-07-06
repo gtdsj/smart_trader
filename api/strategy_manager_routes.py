@@ -4,7 +4,7 @@
 提供策略的创建、查询、更新、删除等接口
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TypeVar, Generic
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, Query, Path
 from pydantic import BaseModel, Field, validator
@@ -164,8 +164,43 @@ class StrategyDetailResponse(StrategyResponse):
 
 class IndicatorResponse(BaseModel):
     """指标响应模型"""
-    technical: Dict[str, str] = Field(..., description="技术指标")
-    fundamental: Dict[str, str] = Field(..., description="基本面指标")
+    technical: Dict[str, Any] = Field(..., description="技术指标")
+    fundamental: Dict[str, Any] = Field(..., description="基本面指标")
+
+
+class OperatorResponse(BaseModel):
+    """操作符响应模型"""
+    comparison: Dict[str, Any] = Field(..., description="比较操作符列表")
+    logic: Dict[str, Any] = Field(..., description="逻辑操作符列表")
+
+
+class ParseExpressionRequest(BaseModel):
+    """解析表达式请求模型"""
+    expression: str = Field(..., description="策略表达式字符串")
+
+
+class EvaluateExpressionRequest(BaseModel):
+    """评估表达式请求模型"""
+    expression: str = Field(..., description="策略表达式字符串")
+    symbol: str = Field(..., description="股票代码")
+    start_date: Optional[str] = Field(None, description="开始日期")
+    end_date: Optional[str] = Field(None, description="结束日期")
+
+
+class ExpressionParseResponse(BaseModel):
+    """表达式解析响应模型"""
+    success: bool = Field(..., description="解析是否成功")
+    description: str = Field(..., description="表达式描述")
+    validation: Dict[str, Any] = Field(..., description="验证结果")
+    message: str = Field(..., description="响应消息")
+
+
+class ExpressionEvaluationResponse(BaseModel):
+    """表达式评估响应模型"""
+    success: bool = Field(..., description="评估是否成功")
+    result: bool = Field(..., description="评估结果")
+    indicators: Dict[str, Any] = Field(..., description="计算的指标值")
+    message: str = Field(..., description="响应消息")
 
 
 class StrategyTemplateResponse(BaseModel):
@@ -227,11 +262,13 @@ class ExecuteStrategyResponse(BaseModel):
     execution_time: str
 
 
-class ApiResponse(BaseModel):
-    """API响应基类"""
+T = TypeVar('T')
+
+class ApiResponse(BaseModel, Generic[T]):
+    """通用API响应模型"""
     success: bool = Field(..., description="是否成功")
     message: str = Field(..., description="响应消息")
-    data: Any = Field(None, description="响应数据")
+    data: Optional[T] = Field(None, description="响应数据")
 
 
 class PaginatedResponse(BaseModel):
@@ -376,6 +413,23 @@ async def get_available_indicators(
         raise HTTPException(status_code=500, detail=f"获取指标列表失败: {str(e)}")
 
 
+@router.get("/available-operators", response_model=ApiResponse, summary="获取可用操作符列表")
+async def get_available_operators(
+    manager: StrategyManager = Depends(get_strategy_manager)
+):
+    """获取可用操作符列表"""
+    try:
+        operators = await manager.get_available_operators()
+        return {
+            "success": True,
+            "message": "获取操作符列表成功",
+            "data": operators
+        }
+    except Exception as e:
+        logger.error(f"获取操作符列表API错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取操作符列表失败: {str(e)}")
+
+
 @router.get("/templates", response_model=ApiResponse, summary="获取策略模板")
 async def get_strategy_templates(
     manager: StrategyManager = Depends(get_strategy_manager)
@@ -391,6 +445,79 @@ async def get_strategy_templates(
     except Exception as e:
         logger.error(f"获取策略模板API错误: {e}")
         raise HTTPException(status_code=500, detail=f"获取策略模板失败: {str(e)}")
+
+
+@router.post("/parse-expression", response_model=ApiResponse[ExpressionParseResponse], summary="解析策略表达式")
+async def parse_strategy_expression(
+    request: ParseExpressionRequest,
+    manager: StrategyManager = Depends(get_strategy_manager)
+):
+    """解析策略表达式"""
+    try:
+        result = await manager.parse_strategy_expression(request.expression)
+        
+        response_data = ExpressionParseResponse(
+            success=result["success"],
+            description=result["description"],
+            validation=result["validation"],
+            message=result["message"]
+        )
+        
+        return {
+            "success": True,
+            "message": "表达式解析完成",
+            "data": response_data
+        }
+    except Exception as e:
+        logger.error(f"解析策略表达式API错误: {e}")
+        raise HTTPException(status_code=500, detail=f"解析策略表达式失败: {str(e)}")
+
+
+@router.post("/evaluate-expression", response_model=ApiResponse[ExpressionEvaluationResponse], summary="评估策略表达式")
+async def evaluate_strategy_expression(
+    request: EvaluateExpressionRequest,
+    manager: StrategyManager = Depends(get_strategy_manager)
+):
+    """评估策略表达式"""
+    try:
+        # 获取股票数据
+        from services.data_service import DataService
+        data_service = DataService()
+        
+        # 设置日期范围
+        end_date = request.end_date or datetime.now().strftime('%Y-%m-%d')
+        start_date = request.start_date or (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+        
+        # 获取股票数据
+        stock_data = await data_service.get_stock_data(
+            symbol=request.symbol,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        if stock_data.empty:
+            raise HTTPException(status_code=404, detail=f"未找到股票 {request.symbol} 的数据")
+        
+        # 评估表达式
+        result = await manager.evaluate_strategy_expression(request.expression, stock_data, request.symbol)
+        
+        response_data = ExpressionEvaluationResponse(
+            success=result["success"],
+            result=result["result"],
+            indicators=result["indicators"],
+            message=result["message"]
+        )
+        
+        return {
+            "success": True,
+            "message": "表达式评估完成",
+            "data": response_data
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"评估策略表达式API错误: {e}")
+        raise HTTPException(status_code=500, detail=f"评估策略表达式失败: {str(e)}")
 
 
 @router.get("/categories", response_model=ApiResponse, summary="获取策略分类列表")

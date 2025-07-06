@@ -23,6 +23,9 @@ from core.database import (
 )
 from core.cache_adapter import get_cache_client
 from services.data_service import DataService
+from services.indicator_manager import IndicatorManager
+from services.operator_manager import OperatorManager
+from services.strategy_expression_parser import StrategyExpressionParser
 
 
 class StrategyCategory(Enum):
@@ -81,30 +84,10 @@ class StrategyManager:
         self.cache_client = get_cache_client()
         self.data_service = None  # 延迟初始化
         
-        # 内置技术指标列表
-        self.technical_indicators = {
-            "ma": "移动平均线",
-            "ema": "指数移动平均线",
-            "rsi": "相对强弱指数",
-            "macd": "MACD指标",
-            "kdj": "KDJ指标",
-            "bollinger": "布林带",
-            "volume": "成交量",
-            "turnover_rate": "换手率",
-            "price_change": "价格变化",
-            "price_change_pct": "价格变化百分比"
-        }
-        
-        # 基本面指标列表
-        self.fundamental_indicators = {
-            "pe_ratio": "市盈率",
-            "pb_ratio": "市净率",
-            "market_cap": "市值",
-            "revenue_growth": "营收增长率",
-            "profit_growth": "利润增长率",
-            "roe": "净资产收益率",
-            "debt_ratio": "负债率"
-        }
+        # 初始化指标管理器、操作符管理器和表达式解析器
+        self.indicator_manager = IndicatorManager()
+        self.operator_manager = OperatorManager()
+        self.expression_parser = StrategyExpressionParser()
     
     def set_data_service(self, data_service: DataService):
         """设置数据服务"""
@@ -253,18 +236,17 @@ class StrategyManager:
             condition_type = condition["condition_type"]
             indicator = condition["indicator"]
             
-            if condition_type == "technical":
-                if indicator not in self.technical_indicators:
-                    return {
-                        "valid": False,
-                        "message": f"未知的技术指标: {indicator}"
-                    }
-            elif condition_type == "fundamental":
-                if indicator not in self.fundamental_indicators:
-                    return {
-                        "valid": False,
-                        "message": f"未知的基本面指标: {indicator}"
-                    }
+            if condition_type in ["technical", "fundamental"]:
+                indicator_validation = self.indicator_manager.validate_indicator(indicator, condition_type)
+                if not indicator_validation["valid"]:
+                    return indicator_validation
+            
+            # 验证操作符的值
+            value = condition.get("value")
+            operator = condition["operator"]
+            operator_validation = self.operator_manager.validate_operator_value(operator, value)
+            if not operator_validation["valid"]:
+                return operator_validation
             
             return {"valid": True, "message": "条件验证通过"}
             
@@ -590,10 +572,54 @@ class StrategyManager:
     
     async def get_available_indicators(self) -> Dict[str, Any]:
         """获取可用指标列表"""
-        return {
-            "technical": self.technical_indicators,
-            "fundamental": self.fundamental_indicators
-        }
+        return self.indicator_manager.get_all_indicators()
+    
+    async def get_available_operators(self) -> Dict[str, Any]:
+        """获取可用操作符列表"""
+        return self.operator_manager.get_all_operators()
+    
+    async def parse_strategy_expression(self, expression: str) -> Dict[str, Any]:
+        """解析策略表达式"""
+        try:
+            parsed_expression = self.expression_parser.parse_expression_string(expression)
+            validation_result = self.expression_parser.validate_expression(parsed_expression)
+            description = self.expression_parser.get_expression_description(parsed_expression)
+            
+            return {
+                "success": True,
+                "expression": parsed_expression,
+                "validation": validation_result,
+                "description": description,
+                "message": "表达式解析成功"
+            }
+        except Exception as e:
+            logger.error(f"解析策略表达式失败: {e}")
+            return {
+                "success": False,
+                "expression": None,
+                "validation": {"valid": False, "message": str(e)},
+                "description": "",
+                "message": f"表达式解析失败: {str(e)}"
+            }
+    
+    async def evaluate_strategy_expression(self, expression: str, stock_data: pd.DataFrame, symbol: str = None) -> Dict[str, Any]:
+        """评估策略表达式"""
+        try:
+            # 解析表达式
+            parsed_expression = self.expression_parser.parse_expression_string(expression)
+            
+            # 评估表达式
+            evaluation_result = self.expression_parser.evaluate_expression(parsed_expression, stock_data, symbol)
+            
+            return evaluation_result
+        except Exception as e:
+            logger.error(f"评估策略表达式失败: {e}")
+            return {
+                "success": False,
+                "result": False,
+                "indicators": {},
+                "message": f"表达式评估失败: {str(e)}"
+            }
     
     async def get_strategy_templates(self) -> List[Dict[str, Any]]:
         """获取策略模板"""

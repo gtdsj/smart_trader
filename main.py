@@ -24,6 +24,7 @@ from api.backtest_routes import router as backtest_router, set_backtest_service
 from api.notification_routes import router as notification_router, set_notification_service
 from api.config_routes import router as config_router
 from api.scheduler_routes import router as scheduler_router
+from api.stock_screener_routes import router as stock_screener_router
 from services.notification_service import NotificationService
 from services.data_service import DataService
 from services.trading_service import TradingService
@@ -211,6 +212,7 @@ def create_app() -> FastAPI:
     app.include_router(notification_router)
     app.include_router(config_router)
     app.include_router(scheduler_router)
+    app.include_router(stock_screener_router)
     
     @app.get("/", tags=["系统"])
     async def root():
