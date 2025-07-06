@@ -19,7 +19,7 @@ from core.database import get_duckdb_connection
 from services.xtquant_service import XtQuantService
 from configs.optimized_backfill_config import OptimizedBackfillConfig
 from utils.logger import get_logger
-# from xtquant.xttype import Period  # 注释掉，因为 xtquant 中没有 Period 类
+from services.xtquant_service import Period
 
 logger = get_logger(__name__)
 
@@ -373,7 +373,7 @@ class OptimizedBackfillService:
             
         except Exception as e:
             duration = time.time() - start_time
-            logger.error(f"超高速批量插入{data_count}条数据失败，耗时{duration:.3f}秒: {e}")
+            logger.error(f"超高速批量插入{data_count}条数据失败，耗时{duration:.3f}秒: {traceback.format_exc()}")
             return 0
     
     async def _optimized_copy_insert(self, batch_data: List[Dict]) -> int:
