@@ -532,17 +532,17 @@ def init_database():
                             pass
                 
                 # 设置环境变量以避免编码问题
-                import locale
-                try:
-                    # 设置系统编码
-                    os.environ['PYTHONIOENCODING'] = 'utf-8'
-                    os.environ['LC_ALL'] = 'C.UTF-8'
-                    locale.setlocale(locale.LC_ALL, 'C.UTF-8')
-                except:
-                    try:
-                        locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
-                    except:
-                        pass
+                # import locale
+                # try:
+                #     # 设置系统编码
+                #     os.environ['PYTHONIOENCODING'] = 'utf-8'
+                #     os.environ['LC_ALL'] = 'C.UTF-8'
+                #     locale.setlocale(locale.LC_ALL, 'C.UTF-8')
+                # except:
+                #     try:
+                #         locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+                #     except:
+                #         pass
                 
                 # 尝试使用ASCII安全的路径
                 safe_db_path = db_path
