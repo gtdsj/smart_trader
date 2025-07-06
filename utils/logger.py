@@ -14,18 +14,35 @@ def get_logger(name: str, level: str = "INFO") -> logging.Logger:
     logger = logging.getLogger(name)
     
     if not logger.handlers:
-        # 创建控制台处理器
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(getattr(logging, level.upper()))
+        # 获取设置
+        settings = get_settings()
+        
+        # 创建日志目录
+        log_dir = Path(settings.log_dir)
+        log_dir.mkdir(parents=True, exist_ok=True)
         
         # 创建格式器
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
+        
+        # 创建控制台处理器
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(getattr(logging, level.upper()))
         console_handler.setFormatter(formatter)
+        
+        # 创建文件处理器
+        from datetime import datetime
+        log_filename = f"{settings.log_file_prefix}_{datetime.now().strftime('%Y-%m-%d')}.log"
+        log_file_path = log_dir / log_filename
+        
+        file_handler = logging.FileHandler(log_file_path, encoding='utf-8')
+        file_handler.setLevel(getattr(logging, level.upper()))
+        file_handler.setFormatter(formatter)
         
         # 添加处理器到logger
         logger.addHandler(console_handler)
+        logger.addHandler(file_handler)
         logger.setLevel(getattr(logging, level.upper()))
     
     return logger

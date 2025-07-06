@@ -471,6 +471,7 @@ class XtQuantService:
                                     
                                     # 转换索引为时间格式
                                     df.index = df.index.map(convert_mixed_time)
+                                    df['time'] = df.index
                                     # 删除无效的时间数据
                                     df = df[df.index.notna()]
                                     

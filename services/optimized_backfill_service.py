@@ -373,7 +373,7 @@ class OptimizedBackfillService:
             
         except Exception as e:
             duration = time.time() - start_time
-            logger.error(f"超高速批量插入{data_count}条数据失败，耗时{duration:.3f}秒: {traceback.format_exc()}")
+            logger.error(f"超高速批量插入{data_count}条数据失败，耗时{duration:.3f}秒: {traceback.format_exc()}, data:{batch_data}")
             return 0
     
     async def _optimized_copy_insert(self, batch_data: List[Dict]) -> int:
@@ -444,34 +444,32 @@ class OptimizedBackfillService:
             (FORMAT CSV, HEADER false, DELIMITER ',')
             """
             self.duckdb.execute(copy_sql)
-            
-            # 使用MERGE进行UPSERT操作
-            merge_sql = """
-            MERGE daily_data AS target
-            USING temp_ultra_fast_daily_data AS source
-            ON target.stock_code = source.stock_code AND target.trade_date = source.trade_date
-            WHEN MATCHED THEN UPDATE SET
-                open_price = source.open_price,
-                high_price = source.high_price,
-                low_price = source.low_price,
-                close_price = source.close_price,
-                volume = source.volume,
-                amount = source.amount,
-                turnover_rate = source.turnover_rate,
-                pe_ratio = source.pe_ratio,
-                pb_ratio = source.pb_ratio,
-                updated_at = CURRENT_TIMESTAMP
-            WHEN NOT MATCHED THEN INSERT (
+
+
+            # 使用INSERT ... ON CONFLICT进行UPSERT操作（DuckDB支持的语法）
+            upsert_sql = """
+            INSERT INTO daily_stock_data (
                 stock_code, trade_date, open_price, high_price, low_price, close_price,
                 volume, amount, turnover_rate, pe_ratio, pb_ratio, created_at, updated_at
-            ) VALUES (
-                source.stock_code, source.trade_date, source.open_price, source.high_price,
-                source.low_price, source.close_price, source.volume, source.amount,
-                source.turnover_rate, source.pe_ratio, source.pb_ratio,
-                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
+            SELECT 
+                stock_code, trade_date, open_price, high_price, low_price, close_price,
+                volume, amount, turnover_rate, pe_ratio, pb_ratio,
+                NOW(), NOW()
+            FROM temp_ultra_fast_daily_data
+            ON CONFLICT (stock_code, trade_date) DO UPDATE SET
+                open_price = EXCLUDED.open_price,
+                high_price = EXCLUDED.high_price,
+                low_price = EXCLUDED.low_price,
+                close_price = EXCLUDED.close_price,
+                volume = EXCLUDED.volume,
+                amount = EXCLUDED.amount,
+                turnover_rate = EXCLUDED.turnover_rate,
+                pe_ratio = EXCLUDED.pe_ratio,
+                pb_ratio = EXCLUDED.pb_ratio,
+                updated_at = NOW()
             """
-            self.duckdb.execute(merge_sql)
+            self.duckdb.execute(upsert_sql)
             
             # 提交事务
             self.duckdb.execute("COMMIT")
@@ -533,7 +531,7 @@ class OptimizedBackfillService:
         
         # 确保日期格式
         if 'trade_date' in df.columns:
-            df['trade_date'] = pd.to_datetime(df['trade_date']).dt.strftime('%Y-%m-%d')
+            df['trade_date'] = df['trade_date'].dt.strftime('%Y-%m-%d')
         
         return df
     
