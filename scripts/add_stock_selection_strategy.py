@@ -138,7 +138,7 @@ def create_custom_stock_selection_strategy():
     ]
     
     return {
-        "name": "自定义多维度选股策略",
+        "name": "角度趋势选股",
         "description": "基于技术面、资金面等多维度条件的综合选股策略，包含基础过滤、技术指标和资金流向等多重筛选条件",
         "category": StrategyCategory.STOCK_SELECTION.value,
         "strategy_type": "custom_stock_selection",

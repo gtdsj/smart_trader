@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Generator
 # 移除loguru以避免Python 3.6兼容性问题
 from loguru import logger
-import os
+import os, sys
 import duckdb
 
 from config import get_settings
@@ -441,6 +441,15 @@ _database_initializing = False
 _initialization_lock = None
 
 
+def is_valid_duckdb_file(file_path):
+    try:
+        con = duckdb.connect(file_path)
+        con.execute("SELECT 1")
+        con.close()
+        return True
+    except:
+        return False
+
 def init_database():
     """初始化数据库连接（单例模式，确保只初始化一次）"""
     global engine, SessionLocal, _database_initialized, _database_initializing, _initialization_lock
@@ -506,33 +515,11 @@ def init_database():
                 
                 # 如果文件存在但可能损坏，尝试删除重建
                 if os.path.exists(db_path):
-                    try:
-                        # 测试文件是否可读
-                        with open(db_path, 'rb') as f:
-                            # 读取文件头部检查是否为有效的DuckDB文件
-                            header = f.read(16)
-                            if len(header) < 16 or header[:4] != b'DUCK':
-                                logger.warning(f"数据库文件格式无效，删除重建: {db_path}")
-                                os.remove(db_path)
-                    except (OSError, IOError, UnicodeDecodeError) as e:
-                        logger.warning(f"数据库文件读取失败，删除重建: {e}")
-                        try:
-                            os.remove(db_path)
-                        except:
-                            pass
-                
-                # 设置环境变量以避免编码问题
-                # import locale
-                # try:
-                #     # 设置系统编码
-                #     os.environ['PYTHONIOENCODING'] = 'utf-8'
-                #     os.environ['LC_ALL'] = 'C.UTF-8'
-                #     locale.setlocale(locale.LC_ALL, 'C.UTF-8')
-                # except:
-                #     try:
-                #         locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
-                #     except:
-                #         pass
+                    if not is_valid_duckdb_file(db_path):
+                        logger.warning(f"数据库文件读取失败，不是有效的duckdb文件: {db_path}")
+                        sys.exit(1)
+                    else:
+                        logger.info(f"数据库文件 {db_path} 存在，检查通过")
                 
                 # 尝试使用ASCII安全的路径
                 safe_db_path = db_path
