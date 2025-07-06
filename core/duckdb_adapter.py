@@ -103,11 +103,16 @@ class DuckDBAdapter:
             # 启用并行处理
             self.connection.execute("SET enable_progress_bar=false")
             
-            # 设置临时目录
-            temp_dir = os.path.join(os.path.dirname(self.db_path) if self.db_path else os.getcwd(), 'temp')
-            if not os.path.exists(temp_dir):
-                os.makedirs(temp_dir, exist_ok=True)
-            self.connection.execute(f"SET temp_directory='{temp_dir}'")
+            # 设置临时目录 - 使用系统临时目录避免中文路径编码问题
+            import tempfile
+            temp_dir = tempfile.gettempdir()
+            # 确保使用英文路径，避免编码问题
+            try:
+                self.connection.execute(f"SET temp_directory='{temp_dir}'")
+            except UnicodeDecodeError:
+                # 如果仍有编码问题，使用默认设置
+                log_warning("临时目录设置失败，使用默认配置")
+                pass
             
             # 优化查询性能
             self.connection.execute("SET enable_optimizer=true")
@@ -400,91 +405,15 @@ def get_duckdb() -> DuckDBAdapter:
 def init_duckdb():
     """初始化DuckDB"""
     db = get_duckdb()
-    _create_tables(db)
+    # 表创建已移至统一的 core.database 模块
     log_info("DuckDB服务启动")
 
 
 def _create_tables(db: DuckDBAdapter):
-    """创建必要的数据库表"""
-    try:
-        # 创建股票数据表
-        create_stock_data_sql = """
-        CREATE TABLE IF NOT EXISTS stock_data (
-            id INTEGER PRIMARY KEY,
-            stock_code VARCHAR(20) NOT NULL,
-            trade_date TIMESTAMP NOT NULL,
-            open_price DOUBLE,
-            high_price DOUBLE,
-            low_price DOUBLE,
-            close_price DOUBLE,
-            volume DOUBLE,
-            amount DOUBLE,
-            turnover_rate DOUBLE,
-            pe_ratio DOUBLE,
-            pb_ratio DOUBLE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-        db.execute(create_stock_data_sql)
-        
-        # 创建交易订单表
-        create_orders_sql = """
-        CREATE TABLE IF NOT EXISTS trading_orders (
-            id INTEGER PRIMARY KEY,
-            order_id VARCHAR(50) UNIQUE NOT NULL,
-            stock_code VARCHAR(20) NOT NULL,
-            order_type VARCHAR(10) NOT NULL,
-            order_status VARCHAR(20) NOT NULL,
-            quantity INTEGER NOT NULL,
-            price DOUBLE NOT NULL,
-            filled_quantity INTEGER DEFAULT 0,
-            filled_price DOUBLE,
-            commission DOUBLE DEFAULT 0.0,
-            strategy_name VARCHAR(100),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-        db.execute(create_orders_sql)
-        
-        # 创建持仓表
-        create_positions_sql = """
-        CREATE TABLE IF NOT EXISTS positions (
-            id INTEGER PRIMARY KEY,
-            stock_code VARCHAR(20) NOT NULL UNIQUE,
-            quantity INTEGER NOT NULL,
-            avg_cost DOUBLE NOT NULL,
-            current_price DOUBLE,
-            market_value DOUBLE,
-            profit_loss DOUBLE,
-            profit_loss_ratio DOUBLE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-        db.execute(create_positions_sql)
-        
-        # 创建策略表
-        create_strategies_sql = """
-        CREATE TABLE IF NOT EXISTS strategies (
-            id INTEGER PRIMARY KEY,
-            name VARCHAR(100) NOT NULL UNIQUE,
-            description TEXT,
-            strategy_type VARCHAR(50) NOT NULL,
-            parameters TEXT,
-            is_active BOOLEAN DEFAULT true,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-        db.execute(create_strategies_sql)
-        
-        log_info("DuckDB数据库表创建完成")
-        
-    except Exception as e:
-        log_error(f"创建数据库表失败: {e}")
-        raise
+    """创建数据库表 - 已移除，使用统一的 core.database 模块"""
+    # 表创建逻辑已移至 core.database 模块
+    # 这里不再重复创建表，避免冲突
+    log_info("DuckDB适配器：跳过表创建，使用统一数据库模块")
 
 
 def close_duckdb():

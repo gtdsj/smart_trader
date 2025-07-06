@@ -349,10 +349,7 @@ async def _execute_optimized_backfill(task_id: str, request: UnifiedBackfillRequ
             market=request.market,
             start_date=request.start_date,
             end_date=request.end_date,
-            stock_codes=request.stock_codes,
-            force_update=request.force_update,
-            enable_parallel=request.enable_parallel,
-            batch_size=request.batch_size
+            force_update=request.force_update
         )
         
         task_info["status"] = "completed"

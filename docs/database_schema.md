@@ -34,7 +34,10 @@ Smart Trader 量化交易系统使用 DuckDB 作为主要数据库引擎，具�
 
 **建表语句**:
 ```sql
+CREATE SEQUENCE IF NOT EXISTS daily_stock_data_id_seq START 1;
+
 CREATE TABLE IF NOT EXISTS daily_stock_data (
+    id INTEGER PRIMARY KEY DEFAULT nextval('daily_stock_data_id_seq'),
     stock_code VARCHAR NOT NULL,
     trade_date DATE NOT NULL,
     open_price DECIMAL(10,3),
@@ -46,9 +49,9 @@ CREATE TABLE IF NOT EXISTS daily_stock_data (
     turnover_rate DECIMAL(8,4),
     pe_ratio DECIMAL(8,2),
     pb_ratio DECIMAL(8,2),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (stock_code, trade_date)
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE (stock_code, trade_date)
 );
 ```
 

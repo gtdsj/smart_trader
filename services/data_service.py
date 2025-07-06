@@ -83,17 +83,21 @@ class DataService:
                         db_path = self.settings.database.path
                         self.duckdb = DuckDBAdapter(db_path)
                 
-                # 确保DuckDB表已创建
-                try:
-                    from core.duckdb_adapter import _create_tables
-                    _create_tables(self.duckdb)
-                    logger.info("DuckDB表创建完成")
-                except Exception as e:
-                    logger.warning(f"DuckDB表创建失败: {e}")
+                # DuckDB表创建已移至统一的 core.database 模块
+                logger.info("DuckDB表创建已由统一数据库模块处理")
                 
                 return True
             
             await loop.run_in_executor(None, init_db)
+            
+            # 初始化日线数据表（在主线程中执行）
+            if self.duckdb:
+                try:
+                    self._init_daily_data_table()
+                    logger.info("日线数据表初始化完成")
+                except Exception as e:
+                    logger.warning(f"日线数据表初始化失败: {e}")
+            
             self.db_initialized = True
             logger.info("DuckDB数据库异步初始化成功")
             
@@ -320,43 +324,10 @@ class DataService:
             return pd.DataFrame()
     
     def _init_daily_data_table(self):
-        """初始化日线数据表"""
-        try:
-            create_table_sql = """
-            CREATE TABLE IF NOT EXISTS daily_stock_data (
-                stock_code VARCHAR(20) NOT NULL,
-                trade_date DATE NOT NULL,
-                open_price DECIMAL(8,2),
-                high_price DECIMAL(8,2),
-                low_price DECIMAL(8,2),
-                close_price DECIMAL(8,2),
-                volume BIGINT,
-                amount DECIMAL(18,2),
-                turnover_rate DECIMAL(6,4),
-                pe_ratio DECIMAL(8,2),
-                pb_ratio DECIMAL(8,2),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (stock_code, trade_date)
-            )
-            """
-            self.duckdb.execute(create_table_sql)
-            
-            # 创建索引
-            index_sqls = [
-                "CREATE INDEX IF NOT EXISTS idx_daily_stock_code ON daily_stock_data(stock_code)",
-                "CREATE INDEX IF NOT EXISTS idx_daily_trade_date ON daily_stock_data(trade_date)",
-                "CREATE INDEX IF NOT EXISTS idx_daily_code_date ON daily_stock_data(stock_code, trade_date)"
-            ]
-            
-            for sql in index_sqls:
-                self.duckdb.execute(sql)
-                
-            logger.info("日线数据表初始化完成")
-            
-        except Exception as e:
-            logger.error(f"初始化日线数据表失败: {e}, {traceback.format_exc()}")
-            raise
+        """初始化日线数据表 - 已移除，使用统一的 core.database 模块"""
+        # 表创建逻辑已移至 core.database.create_tables_manually()
+        # 这里不再重复创建表，避免冲突
+        logger.info("数据服务：跳过表创建，使用统一数据库模块")
     
     async def get_stock_daily_data(self, stock_code: str, start_date: str = None, 
                                  end_date: str = None, save_to_db: bool = True) -> pd.DataFrame:
@@ -561,7 +532,7 @@ class DataService:
                 INSERT INTO daily_stock_data 
                 (stock_code, trade_date, open_price, high_price, low_price, 
                  close_price, volume, amount, turnover_rate, pe_ratio, pb_ratio, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
                 """
                 
                 # 准备批量插入数据

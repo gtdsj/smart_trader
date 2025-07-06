@@ -253,27 +253,25 @@ if __name__ == "__main__":
         format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} | {message}"
     )
     
-    def signal_handler(signum, frame):
-        """信号处理器，用于优雅关闭"""
-        logger.info(f"接收到信号 {signum}，开始优雅关闭...")
-        sys.exit(0)
-    
-    # 注册信号处理器
-    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
-    signal.signal(signal.SIGTERM, signal_handler)  # 终止信号
-    
     try:
+        logger.info("启动量化交易系统...")
+        logger.info(f"请使用以下命令启动服务:")
+        logger.info(f"uvicorn main:app --host {settings.api_host} --port {settings.api_port} --log-level {settings.log_level.lower()}")
+        
+        # 直接使用uvicorn.run启动
         uvicorn.run(
-            "main:app",
+            app,
             host=settings.api_host,
             port=settings.api_port,
-            reload=settings.debug,
-            log_level=settings.log_level.lower()
+            log_level=settings.log_level.lower(),
+            reload=False
         )
     except KeyboardInterrupt:
         logger.info("接收到键盘中断，程序正在退出...")
     except Exception as e:
         logger.error(f"程序运行出错: {e}")
+        import traceback
+        logger.error(f"错误详情: {traceback.format_exc()}")
         sys.exit(1)
     finally:
         logger.info("程序已退出")

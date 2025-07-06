@@ -3,6 +3,7 @@
 XtQuant数据和交易服务模块
 提供完整的xtquant功能封装，包括数据获取、实时订阅、交易委托等
 """
+import os
 import traceback
 import asyncio
 import time
@@ -144,7 +145,9 @@ class XtQuantService:
     def _get_next_session_id(cls) -> int:
         """获取下一个可用的session_id"""
         with cls._session_lock:
-            cls._session_counter += 1
+            # 使用时间戳确保session_id的唯一性
+            import time
+            cls._session_counter = int(time.time() * 1000) % 1000000  # 取时间戳的后6位
             return cls._session_counter
     
     def __init__(self):

@@ -933,3 +933,10 @@ class StrategyService:
             score += 10
         
         return score
+    
+    async def stop(self):
+        """停止策略服务"""
+        try:
+            logger.info("策略服务已停止")
+        except Exception as e:
+            logger.error(f"停止策略服务失败: {e}, {traceback.format_exc()}")

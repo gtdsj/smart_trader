@@ -429,3 +429,10 @@ class NotificationService:
         except Exception as e:
             logger.error(f"获取通知历史失败: {e}, {traceback.format_exc()}")
             return []
+    
+    async def stop(self):
+        """停止通知服务"""
+        try:
+            logger.info("通知服务已停止")
+        except Exception as e:
+            logger.error(f"停止通知服务失败: {e}, {traceback.format_exc()}")

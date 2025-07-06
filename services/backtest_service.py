@@ -757,3 +757,14 @@ class BacktestService:
         except Exception as e:
             logger.error(f"获取回测进度失败: {e}, {traceback.format_exc()}")
             return None
+    
+    async def stop(self):
+        """停止回测服务"""
+        try:
+            # 停止所有正在运行的回测
+            for backtest_id in list(self.running_backtests.keys()):
+                await self.stop_backtest(backtest_id)
+            
+            logger.info("回测服务已停止")
+        except Exception as e:
+            logger.error(f"停止回测服务失败: {e}, {traceback.format_exc()}")

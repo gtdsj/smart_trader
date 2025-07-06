@@ -44,7 +44,7 @@ class OptimizedBackfillConfig:
         'temp_directory': './temp',
         'enable_object_cache': True,
         'enable_http_metadata_cache': True,
-        'force_compression': 'gzip'
+        'force_compression': 'zstd'  # 修复：使用支持的压缩格式
     }
     
     # 批量插入策略配置

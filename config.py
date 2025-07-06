@@ -35,7 +35,10 @@ class DatabaseConfig(BaseModel):
         if self.memory:
             return "duckdb:///:memory:"
         else:
-            return f"duckdb:///{self.path}"
+            # 确保路径使用正斜杠，避免编码问题
+            import os
+            normalized_path = os.path.abspath(self.path).replace('\\', '/')
+            return f"duckdb:///{normalized_path}"
 
 
 # Redis配置已移除，使用本地缓存替代
