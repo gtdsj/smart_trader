@@ -10,21 +10,11 @@ from sqlalchemy.sql import func
 from datetime import datetime
 from typing import Generator
 # 移除loguru以避免Python 3.6兼容性问题
-# from loguru import logger
+from loguru import logger
 import os
 import duckdb
 
 from config import get_settings
-
-# 简单的日志函数
-def log_info(msg):
-    print(f"[INFO] {msg}")
-
-def log_error(msg):
-    print(f"[ERROR] {msg}")
-
-def log_warning(msg):
-    print(f"[WARNING] {msg}")
 
 
 Base = declarative_base()
@@ -258,11 +248,11 @@ def create_tables_manually(engine):
             """))
             conn.commit()
             
-            log_info("数据库表创建完成")
+            logger.info("数据库表创建完成")
         except Exception as e:
-            log_error(f"创建数据库表时出错: {e}")
+            logger.error(f"创建数据库表时出错: {e}")
             import traceback
-            log_error(f"错误详情: {traceback.format_exc()}")
+            logger.error(f"错误详情: {traceback.format_exc()}")
             raise
 
 
@@ -462,32 +452,32 @@ def init_database():
     
     # 快速检查（无锁）
     if _database_initialized and engine is not None and SessionLocal is not None:
-        log_info("数据库已经初始化，跳过重复初始化")
+        logger.info("数据库已经初始化，跳过重复初始化")
         return
     
     # 如果正在初始化，等待完成
     if _database_initializing:
-        log_info("数据库正在初始化中，等待完成...")
+        logger.info("数据库正在初始化中，等待完成...")
         while _database_initializing:
             import time
             time.sleep(0.1)
         # 等待完成后再次检查
         if _database_initialized and engine is not None and SessionLocal is not None:
-            log_info("数据库初始化已完成")
+            logger.info("数据库初始化已完成")
             return
     
     # 获取锁进行初始化
     with _initialization_lock:
         # 双重检查锁定模式 - 再次检查状态
         if _database_initialized and engine is not None and SessionLocal is not None:
-            log_info("数据库已经初始化（双重检查），跳过重复初始化")
+            logger.info("数据库已经初始化（双重检查），跳过重复初始化")
             return
         
         if _database_initializing:
-            log_info("其他线程正在初始化，等待完成")
+            logger.info("其他线程正在初始化，等待完成")
             return
         
-        log_info("开始初始化数据库连接...")
+        logger.info("开始初始化数据库连接...")
         
         # 标记为正在初始化
         _database_initializing = True
@@ -495,14 +485,14 @@ def init_database():
     
     try:
         settings = get_settings()
-        log_info(f"正在连接数据库: {settings.database.url}")
+        logger.info(f"正在连接数据库: {settings.database.url}")
         
         # 确保数据库目录存在
         if settings.database.url.startswith('duckdb://'):
             db_path = settings.database.url.replace('duckdb:///', '')
             if db_path != ':memory:':
                 os.makedirs(os.path.dirname(db_path), exist_ok=True)
-                log_info(f"数据库路径: {db_path}")
+                logger.info(f"数据库路径: {db_path}")
         
         # 处理DuckDB连接和编码问题
         database_url = settings.database.url
@@ -512,7 +502,7 @@ def init_database():
             
             # 检查数据库文件状态
             if db_path != ':memory:':
-                log_info(f"检查数据库文件: {db_path}")
+                logger.info(f"检查数据库文件: {db_path}")
                 
                 # 如果文件存在但可能损坏，尝试删除重建
                 if os.path.exists(db_path):
@@ -522,10 +512,10 @@ def init_database():
                             # 读取文件头部检查是否为有效的DuckDB文件
                             header = f.read(16)
                             if len(header) < 16 or header[:4] != b'DUCK':
-                                log_warning(f"数据库文件格式无效，删除重建: {db_path}")
+                                logger.warning(f"数据库文件格式无效，删除重建: {db_path}")
                                 os.remove(db_path)
                     except (OSError, IOError, UnicodeDecodeError) as e:
-                        log_warning(f"数据库文件读取失败，删除重建: {e}")
+                        logger.warning(f"数据库文件读取失败，删除重建: {e}")
                         try:
                             os.remove(db_path)
                         except:
@@ -554,7 +544,7 @@ def init_database():
                     import tempfile
                     temp_dir = tempfile.gettempdir()
                     safe_db_path = os.path.join(temp_dir, 'smart_trader.db')
-                    log_warning(f"路径包含非ASCII字符，使用临时路径: {safe_db_path}")
+                    logger.warning(f"路径包含非ASCII字符，使用临时路径: {safe_db_path}")
                     database_url = f'duckdb:///{safe_db_path}'
                 
                 # 尝试创建新的数据库连接
@@ -566,12 +556,12 @@ def init_database():
                 
                 for attempt_path, attempt_desc in connection_attempts:
                     try:
-                        log_info(f"尝试{attempt_desc}连接: {attempt_path}")
+                        logger.info(f"尝试{attempt_desc}连接: {attempt_path}")
                         test_conn = duckdb.connect(attempt_path)
                         # 测试基本操作
                         test_conn.execute("SELECT 1")
                         test_conn.close()
-                        log_info(f"{attempt_desc}连接测试成功")
+                        logger.info(f"{attempt_desc}连接测试成功")
                         
                         # 更新数据库URL
                         if attempt_path == ':memory:':
@@ -581,42 +571,42 @@ def init_database():
                         break
                         
                     except Exception as e:
-                        log_error(f"{attempt_desc}连接失败: {e}")
+                        logger.error(f"{attempt_desc}连接失败: {e}")
                         # 删除可能损坏的文件
                         if attempt_path != ':memory:' and os.path.exists(attempt_path):
                             try:
                                 os.remove(attempt_path)
-                                log_info(f"已删除损坏的数据库文件: {attempt_path}")
+                                logger.info(f"已删除损坏的数据库文件: {attempt_path}")
                             except:
                                 pass
                         continue
                 else:
                     # 所有尝试都失败了
-                    log_error("所有数据库连接尝试都失败，强制使用内存数据库")
+                    logger.error("所有数据库连接尝试都失败，强制使用内存数据库")
                     database_url = 'duckdb:///:memory:'
         
-        log_info(f"创建数据库引擎: {database_url}")
+        logger.info(f"创建数据库引擎: {database_url}")
         engine = create_engine(database_url)
         
-        log_info("手动创建数据库表...")
+        logger.info("手动创建数据库表...")
         # 使用原生DuckDB SQL创建表，避免SQLAlchemy的SERIAL问题
         create_tables_manually(engine)
         
-        log_info("创建会话工厂...")
+        logger.info("创建会话工厂...")
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
         
         # 标记数据库已初始化
         _database_initialized = True
         _database_initializing = False
-        log_info("数据库初始化成功")
+        logger.info("数据库初始化成功")
         
     except Exception as e:
         # 重置初始化状态
         _database_initializing = False
         _database_initialized = False
-        log_error(f"数据库初始化失败: {e}")
+        logger.error(f"数据库初始化失败: {e}")
         import traceback
-        log_error(f"错误详情: {traceback.format_exc()}")
+        logger.error(f"错误详情: {traceback.format_exc()}")
         raise
 
 
@@ -649,14 +639,14 @@ def close_database():
         SessionLocal = None
         _database_initialized = False
         _database_initializing = False
-        log_info("数据库连接已关闭")
+        logger.info("数据库连接已关闭")
 
 
 def reset_database():
     """重置数据库连接（用于测试或重新初始化）"""
     global _database_initialized, _database_initializing, _initialization_lock
     
-    log_info("重置数据库连接...")
+    logger.info("重置数据库连接...")
     close_database()
     
     # 重置初始化锁
@@ -668,7 +658,7 @@ def reset_database():
         _database_initialized = False
         _database_initializing = False
     
-    log_info("数据库连接已重置")
+    logger.info("数据库连接已重置")
 
 
 def is_database_initialized():

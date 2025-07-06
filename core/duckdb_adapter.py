@@ -9,17 +9,7 @@ import duckdb
 import os
 from typing import Any, Dict, List, Optional
 # 移除loguru以避免Python 3.6兼容性问题
-# from loguru import logger
-
-# 简单的日志函数
-def log_info(msg):
-    print(f"[INFO] {msg}")
-
-def log_error(msg):
-    print(f"[ERROR] {msg}")
-
-def log_warning(msg):
-    print(f"[WARNING] {msg}")
+from loguru import logger
 
 
 class DuckDBAdapter:
@@ -54,39 +44,39 @@ class DuckDBAdapter:
                         self.connection = duckdb.connect(self.db_path)
                         # 测试连接是否正常
                         self.connection.execute("SELECT 1")
-                        log_info(f"DuckDB连接成功: {self.db_path}")
+                        logger.info(f"DuckDB连接成功: {self.db_path}")
                     except (UnicodeDecodeError, Exception) as e:
-                        log_warning(f"现有数据库文件可能损坏: {e}")
+                        logger.warning(f"现有数据库文件可能损坏: {e}")
                         # 备份损坏的数据库文件
                         backup_path = f"{self.db_path}.backup"
                         if os.path.exists(backup_path):
                             os.remove(backup_path)
                         os.rename(self.db_path, backup_path)
-                        log_info(f"已备份损坏的数据库文件到: {backup_path}")
+                        logger.info(f"已备份损坏的数据库文件到: {backup_path}")
                         # 创建新的数据库连接
                         self.connection = duckdb.connect(self.db_path)
-                        log_info(f"DuckDB重新创建连接成功: {self.db_path}")
+                        logger.info(f"DuckDB重新创建连接成功: {self.db_path}")
                 else:
                     # 创建新的数据库文件
                     self.connection = duckdb.connect(self.db_path)
-                    log_info(f"DuckDB新建连接成功: {self.db_path}")
+                    logger.info(f"DuckDB新建连接成功: {self.db_path}")
             else:
                 self.connection = duckdb.connect(":memory:")
-                log_info("DuckDB内存数据库连接成功")
+                logger.info("DuckDB内存数据库连接成功")
             
             # 应用性能优化配置
             self._optimize_connection()
             
         except Exception as e:
-            log_error(f"DuckDB连接失败: {e}, {traceback.format_exc()}")
+            logger.error(f"DuckDB连接失败: {e}, {traceback.format_exc()}")
             # 如果仍然失败，尝试使用内存数据库作为备选方案
             try:
-                log_warning("尝试使用内存数据库作为备选方案")
+                logger.warning("尝试使用内存数据库作为备选方案")
                 self.connection = duckdb.connect(":memory:")
                 self._optimize_connection()
-                log_info("DuckDB内存数据库备选连接成功")
+                logger.info("DuckDB内存数据库备选连接成功")
             except Exception as fallback_e:
-                log_error(f"备选连接也失败: {fallback_e}")
+                logger.error(f"备选连接也失败: {fallback_e}")
                 raise
     
     def _optimize_connection(self):
@@ -111,16 +101,16 @@ class DuckDBAdapter:
                 self.connection.execute(f"SET temp_directory='{temp_dir}'")
             except UnicodeDecodeError:
                 # 如果仍有编码问题，使用默认设置
-                log_warning("临时目录设置失败，使用默认配置")
+                logger.warning("临时目录设置失败，使用默认配置")
                 pass
             
             # 优化查询性能
             self.connection.execute("SET enable_optimizer=true")
             
-            log_info(f"DuckDB性能优化配置完成: 线程数={cpu_count}, 内存限制=2GB")
+            logger.info(f"DuckDB性能优化配置完成: 线程数={cpu_count}, 内存限制=2GB")
             
         except Exception as e:
-            log_warning(f"DuckDB性能优化配置失败: {e}")
+            logger.warning(f"DuckDB性能优化配置失败: {e}")
     
     def execute(self, sql: str, params: tuple = None) -> Any:
         """执行SQL语句
@@ -139,7 +129,7 @@ class DuckDBAdapter:
                 result = self.connection.execute(sql)
             return result
         except Exception as e:
-            log_error(f"SQL执行失败: {sql}, 错误: {e}")
+            logger.error(f"SQL执行失败: {sql}, 错误: {e}")
             raise
     
     def executemany(self, sql: str, params_list: List[tuple]) -> Any:
@@ -156,7 +146,7 @@ class DuckDBAdapter:
             result = self.connection.executemany(sql, params_list)
             return result
         except Exception as e:
-            log_error(f"批量SQL执行失败: {sql}, 错误: {e}")
+            logger.error(f"批量SQL执行失败: {sql}, 错误: {e}")
             raise
     
     def fetchall(self, sql: str, params: tuple = None) -> List[tuple]:
@@ -173,7 +163,7 @@ class DuckDBAdapter:
             result = self.execute(sql, params)
             return result.fetchall()
         except Exception as e:
-            log_error(f"查询失败: {sql}, 错误: {e}")
+            logger.error(f"查询失败: {sql}, 错误: {e}")
             return []
     
     def fetchone(self, sql: str, params: tuple = None) -> Optional[tuple]:
@@ -190,7 +180,7 @@ class DuckDBAdapter:
             result = self.execute(sql, params)
             return result.fetchone()
         except Exception as e:
-            log_error(f"查询失败: {sql}, 错误: {e}")
+            logger.error(f"查询失败: {sql}, 错误: {e}")
             return None
     
     def fetchdf(self, sql: str, params: tuple = None):
@@ -209,7 +199,7 @@ class DuckDBAdapter:
             else:
                 return self.connection.execute(sql).fetchdf()
         except Exception as e:
-            log_error(f"查询DataFrame失败: {sql}, 错误: {e}")
+            logger.error(f"查询DataFrame失败: {sql}, 错误: {e}")
             return None
     
     def create_table_from_dict(self, table_name: str, data: List[Dict[str, Any]]):
@@ -221,7 +211,7 @@ class DuckDBAdapter:
         """
         try:
             if not data:
-                log_warning(f"数据为空，无法创建表: {table_name}")
+                logger.warning(f"数据为空，无法创建表: {table_name}")
                 return
             
             # 删除已存在的表
@@ -255,10 +245,10 @@ class DuckDBAdapter:
                     values = tuple(row[key] for key in keys)
                     self.execute(insert_sql, values)
             
-            log_info(f"表 {table_name} 创建成功，插入 {len(data)} 条记录")
+            logger.info(f"表 {table_name} 创建成功，插入 {len(data)} 条记录")
             
         except Exception as e:
-            log_error(f"创建表失败: {table_name}, 错误: {e}")
+            logger.error(f"创建表失败: {table_name}, 错误: {e}")
             raise
     
     def insert_dict(self, table_name: str, data: Dict[str, Any]):
@@ -277,7 +267,7 @@ class DuckDBAdapter:
             self.execute(sql, values)
             
         except Exception as e:
-            log_error(f"插入数据失败: {table_name}, 错误: {e}")
+            logger.error(f"插入数据失败: {table_name}, 错误: {e}")
             raise
     
     def update_dict(self, table_name: str, data: Dict[str, Any], where_clause: str, where_params: tuple = None):
@@ -300,7 +290,7 @@ class DuckDBAdapter:
             self.execute(sql, tuple(values))
             
         except Exception as e:
-            log_error(f"更新数据失败: {table_name}, 错误: {e}")
+            logger.error(f"更新数据失败: {table_name}, 错误: {e}")
             raise
     
     def delete(self, table_name: str, where_clause: str, where_params: tuple = None):
@@ -316,7 +306,7 @@ class DuckDBAdapter:
             self.execute(sql, where_params)
             
         except Exception as e:
-            log_error(f"删除数据失败: {table_name}, 错误: {e}")
+            logger.error(f"删除数据失败: {table_name}, 错误: {e}")
             raise
     
     def table_exists(self, table_name: str) -> bool:
@@ -362,7 +352,7 @@ class DuckDBAdapter:
             
             return columns
         except Exception as e:
-            log_error(f"获取表信息失败: {table_name}, 错误: {e}")
+            logger.error(f"获取表信息失败: {table_name}, 错误: {e}")
             return []
     
     def close(self):
@@ -370,9 +360,9 @@ class DuckDBAdapter:
         try:
             if self.connection:
                 self.connection.close()
-                log_info("DuckDB连接已关闭")
+                logger.info("DuckDB连接已关闭")
         except Exception as e:
-            log_error(f"关闭DuckDB连接失败: {e}")
+            logger.error(f"关闭DuckDB连接失败: {e}")
     
     def __enter__(self):
         return self
@@ -397,7 +387,7 @@ def get_duckdb() -> DuckDBAdapter:
         else:
             _db_instance = DuckDBAdapter(settings.database.path)
         
-        log_info("DuckDB适配器初始化完成")
+        logger.info("DuckDB适配器初始化完成")
     
     return _db_instance
 
@@ -406,14 +396,14 @@ def init_duckdb():
     """初始化DuckDB"""
     db = get_duckdb()
     # 表创建已移至统一的 core.database 模块
-    log_info("DuckDB服务启动")
+    logger.info("DuckDB服务启动")
 
 
 def _create_tables(db: DuckDBAdapter):
     """创建数据库表 - 已移除，使用统一的 core.database 模块"""
     # 表创建逻辑已移至 core.database 模块
     # 这里不再重复创建表，避免冲突
-    log_info("DuckDB适配器：跳过表创建，使用统一数据库模块")
+    logger.info("DuckDB适配器：跳过表创建，使用统一数据库模块")
 
 
 def close_duckdb():
@@ -422,4 +412,4 @@ def close_duckdb():
     if _db_instance:
         _db_instance.close()
         _db_instance = None
-        log_info("DuckDB服务关闭")
+        logger.info("DuckDB服务关闭")

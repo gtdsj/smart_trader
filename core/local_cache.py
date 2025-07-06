@@ -10,17 +10,7 @@ import time
 from typing import Any, Optional, Dict, List
 from threading import Lock
 # 移除loguru以避免Python 3.6兼容性问题
-# from loguru import logger
-
-# 简单的日志函数
-def log_info(msg):
-    print(f"[INFO] {msg}")
-
-def log_error(msg):
-    print(f"[ERROR] {msg}")
-
-def log_warning(msg):
-    print(f"[WARNING] {msg}")
+from loguru import logger
 
 
 class LocalCache:
@@ -54,7 +44,7 @@ class LocalCache:
                 }
             return True
         except Exception as e:
-            log_error(f"设置缓存失败: {key}, 错误: {e}")
+            logger.error(f"设置缓存失败: {key}, 错误: {e}")
             return False
     
     def get(self, key: str) -> Optional[Any]:
@@ -81,7 +71,7 @@ class LocalCache:
                 
                 return cache_item['value']
         except Exception as e:
-            log_error(f"获取缓存失败: {key}, 错误: {e}")
+            logger.error(f"获取缓存失败: {key}, 错误: {e}")
             return None
     
     def delete(self, key: str) -> bool:
@@ -100,7 +90,7 @@ class LocalCache:
                     return True
                 return False
         except Exception as e:
-            log_error(f"删除缓存失败: {key}, 错误: {e}")
+            logger.error(f"删除缓存失败: {key}, 错误: {e}")
             return False
     
     def exists(self, key: str) -> bool:
@@ -125,7 +115,7 @@ class LocalCache:
                 self._cache.clear()
             return True
         except Exception as e:
-            log_error(f"清空缓存失败: {e}")
+            logger.error(f"清空缓存失败: {e}")
             return False
     
     def keys(self, pattern: str = "*") -> List[str]:
@@ -149,7 +139,7 @@ class LocalCache:
                         keys.append(key)
                 return keys
         except Exception as e:
-            log_error(f"获取键列表失败: {e}")
+            logger.error(f"获取键列表失败: {e}")
             return []
     
     def expire(self, key: str, seconds: int) -> bool:
@@ -169,7 +159,7 @@ class LocalCache:
                     return True
                 return False
         except Exception as e:
-            log_error(f"设置过期时间失败: {key}, 错误: {e}")
+            logger.error(f"设置过期时间失败: {key}, 错误: {e}")
             return False
     
     def ttl(self, key: str) -> Optional[int]:
@@ -193,7 +183,7 @@ class LocalCache:
                 remaining = cache_item['expire_time'] - time.time()
                 return max(0, int(remaining))
         except Exception as e:
-            log_error(f"获取TTL失败: {key}, 错误: {e}")
+            logger.error(f"获取TTL失败: {key}, 错误: {e}")
             return None
     
     def cleanup_expired(self) -> int:
@@ -216,11 +206,11 @@ class LocalCache:
                     del self._cache[key]
                 
                 if expired_keys:
-                    log_info(f"清理了 {len(expired_keys)} 个过期缓存项")
+                    logger.info(f"清理了 {len(expired_keys)} 个过期缓存项")
                 
                 return len(expired_keys)
         except Exception as e:
-            log_error(f"清理过期缓存失败: {e}")
+            logger.error(f"清理过期缓存失败: {e}")
             return 0
     
     def info(self) -> Dict[str, Any]:
@@ -247,7 +237,7 @@ class LocalCache:
                     'memory_usage': len(str(self._cache))  # 简单的内存使用估算
                 }
         except Exception as e:
-            log_error(f"获取缓存信息失败: {e}")
+            logger.error(f"获取缓存信息失败: {e}")
             return {}
     
     def set_json(self, key: str, value: Any, expire: Optional[int] = None) -> bool:
@@ -265,7 +255,7 @@ class LocalCache:
             json_value = json.dumps(value, ensure_ascii=False)
             return self.set(key, json_value, expire)
         except Exception as e:
-            log_error(f"设置JSON缓存失败: {key}, 错误: {e}")
+            logger.error(f"设置JSON缓存失败: {key}, 错误: {e}")
             return False
     
     def get_json(self, key: str) -> Optional[Any]:
@@ -283,7 +273,7 @@ class LocalCache:
                 return None
             return json.loads(json_value)
         except Exception as e:
-            log_error(f"获取JSON缓存失败: {key}, 错误: {e}")
+            logger.error(f"获取JSON缓存失败: {key}, 错误: {e}")
             return None
 
 
@@ -296,14 +286,14 @@ def get_cache() -> LocalCache:
     global _cache_instance
     if _cache_instance is None:
         _cache_instance = LocalCache()
-        log_info("本地缓存初始化完成")
+        logger.info("本地缓存初始化完成")
     return _cache_instance
 
 
 def init_cache():
     """初始化缓存"""
     get_cache()
-    log_info("本地缓存服务启动")
+    logger.info("本地缓存服务启动")
 
 
 def close_cache():
@@ -312,4 +302,4 @@ def close_cache():
     if _cache_instance:
         _cache_instance.clear()
         _cache_instance = None
-        log_info("本地缓存服务关闭")
+        logger.info("本地缓存服务关闭")
