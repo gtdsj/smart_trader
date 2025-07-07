@@ -1,0 +1,165 @@
+{
+  "name": "多因子选股策略",
+  "description": "基于技术指标和市场特征的多因子选股策略，筛选符合多重条件的优质股票",
+  "strategy_type": "multi_factor_selection",
+  "category": "stock_selection",
+  "parameters": {
+    "lookback_days": 10,
+    "min_trading_days": 3,
+    "ma5_period": 5,
+    "ma10_period": 10,
+    "angle_calculation_window": 3
+  },
+  "priority": 80,
+  "created_by": "user",
+  "version": "1.0",
+  "conditions": [
+    {
+      "condition_type": "custom",
+      "indicator": "consecutive_close_above_ma5",
+      "operator": "==",
+      "value": true,
+      "logic_operator": "AND",
+      "is_active": true,
+      "description": "连续3个交易日收盘价不低于5日均线",
+      "implementation_status": "需要实现",
+      "parameters": {
+        "ma_period": 5,
+        "consecutive_days": 3
+      }
+    },
+    {
+      "condition_type": "custom",
+      "indicator": "is_kcb_stock",
+      "operator": "==",
+      "value": false,
+      "logic_operator": "AND",
+      "is_active": true,
+      "description": "非科创板股票",
+      "implementation_status": "已实现"
+    },
+    {
+      "condition_type": "custom",
+      "indicator": "is_bse_stock",
+      "operator": "==",
+      "value": false,
+      "logic_operator": "AND",
+      "is_active": true,
+      "description": "非北交所股票",
+      "implementation_status": "已实现"
+    },
+    {
+      "condition_type": "technical",
+      "indicator": "price_change_pct",
+      "operator": "between",
+      "value": {
+        "min": -5.0,
+        "max": 6.1
+      },
+      "logic_operator": "AND",
+      "is_active": true,
+      "description": "最近一个交易日涨跌幅在-5%到6.1%之间",
+      "implementation_status": "已实现"
+    },
+    {
+      "condition_type": "custom",
+      "indicator": "is_st_stock",
+      "operator": "==",
+      "value": false,
+      "logic_operator": "AND",
+      "is_active": true,
+      "description": "非ST股票",
+      "implementation_status": "需要完善（需要股票名称数据）"
+    },
+    {
+      "condition_type": "custom",
+      "indicator": "consecutive_close_above_open",
+      "operator": "==",
+      "value": true,
+      "logic_operator": "AND",
+      "is_active": true,
+      "description": "最近两个交易日收盘价都高于开盘价",
+      "implementation_status": "需要实现",
+      "parameters": {
+        "consecutive_days": 2
+      }
+    },
+    {
+      "condition_type": "custom",
+      "indicator": "ma5_angle_consecutive",
+      "operator": ">",
+      "value": 20,
+      "logic_operator": "AND",
+      "is_active": true,
+      "description": "连续3个交易日五日均线角度>20",
+      "implementation_status": "已实现",
+      "parameters": {
+        "ma_period": 5,
+        "consecutive_days": 3,
+        "min_angle": 20
+      }
+    },
+    {
+      "condition_type": "custom",
+      "indicator": "ma5_angle_latest",
+      "operator": ">",
+      "value": 50,
+      "logic_operator": "AND",
+      "is_active": true,
+      "description": "最近一个交易日五日均线角度>50",
+      "implementation_status": "已实现",
+      "parameters": {
+        "ma_period": 5,
+        "min_angle": 50
+      }
+    },
+    {
+      "condition_type": "custom",
+      "indicator": "ma10_angle_consecutive",
+      "operator": ">",
+      "value": 10,
+      "logic_operator": "AND",
+      "is_active": true,
+      "description": "连续3个交易日十日均线角度>10",
+      "implementation_status": "已实现",
+      "parameters": {
+        "ma_period": 10,
+        "consecutive_days": 3,
+        "min_angle": 10
+      }
+    },
+    {
+      "condition_type": "custom",
+      "indicator": "is_break_board",
+      "operator": "==",
+      "value": false,
+      "logic_operator": "AND",
+      "is_active": true,
+      "description": "非破板股",
+      "implementation_status": "需要完善（需要涨停板数据）"
+    },
+    {
+      "condition_type": "custom",
+      "indicator": "main_fund_inflow",
+      "operator": "==",
+      "value": true,
+      "logic_operator": "AND",
+      "is_active": true,
+      "description": "最近一个交易日主力资金净流入",
+      "implementation_status": "需要完善（需要资金流数据）"
+    },
+    {
+      "condition_type": "custom",
+      "indicator": "low_above_ma5",
+      "operator": "==",
+      "value": true,
+      "logic_operator": "AND",
+      "is_active": true,
+      "description": "最近一个交易日最低股价高于五日均线",
+      "implementation_status": "已实现",
+      "parameters": {
+        "ma_period": 5
+      }
+    }
+  ]
+}

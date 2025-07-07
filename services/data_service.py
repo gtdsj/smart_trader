@@ -23,9 +23,22 @@ from services.xtquant_service import XtQuantService, Period
 
 
 class DataService:
-    """数据服务"""
+    """数据服务 - 单例模式"""
+    
+    _instance = None
+    _lock = asyncio.Lock()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(DataService, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
     
     def __init__(self):
+        # 防止重复初始化
+        if self._initialized:
+            return
+            
         self.settings = get_settings()
         self.cache_client = get_cache_client()
         self.notification_service = NotificationService()
@@ -47,6 +60,22 @@ class DataService:
             "创业板指": "399006.SZ",
             "科创50": "000688.SH"
         }
+        
+        # 标记为已初始化
+        self._initialized = True
+    
+    @classmethod
+    def get_instance(cls):
+        """获取单例实例"""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+    
+    @classmethod
+    def reset_instance(cls):
+        """重置单例实例（主要用于测试）"""
+        if cls._instance is not None:
+            cls._instance = None
     
     async def _init_database(self):
         """异步初始化数据库"""
@@ -1333,6 +1362,134 @@ class DataService:
         except Exception as e:
             logger.error(f"移除关注股票失败: {e}, {traceback.format_exc()}")
             return False
+    
+    async def get_stock_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """获取股票数据（为兼容性提供的方法）
+        
+        Args:
+            stock_code: 股票代码
+            start_date: 开始日期，格式YYYY-MM-DD
+            end_date: 结束日期，格式YYYY-MM-DD
+            
+        Returns:
+            股票数据DataFrame
+        """
+        try:
+            return await self.get_historical_data(stock_code, start_date, end_date)
+        except Exception as e:
+            logger.error(f"获取股票数据失败 {stock_code}: {e}")
+            return pd.DataFrame()
+    
+    async def get_batch_historical_data(self, stock_codes: List[str], start_date: str, 
+                                      end_date: str, period: str = "1d") -> Dict[str, pd.DataFrame]:
+        """批量获取多个股票的历史数据
+        优先从本地数据库获取，本地没有时从xtquant获取
+        
+        Args:
+            stock_codes: 股票代码列表
+            start_date: 开始日期，格式YYYY-MM-DD
+            end_date: 结束日期，格式YYYY-MM-DD
+            period: 数据周期，默认为日线
+            
+        Returns:
+            Dict[str, pd.DataFrame]: 股票代码到DataFrame的映射
+        """
+        try:
+            result = {}
+            stocks_need_fetch = []  # 需要从xtquant获取的股票
+            
+            # 首先尝试从本地数据库获取数据
+            for stock_code in stock_codes:
+                try:
+                    db_data = self._get_data_from_db(stock_code, start_date, end_date)
+                    if not db_data.empty:
+                        # 转换为标准格式
+                        processed_df = db_data.copy()
+                        
+                        # 设置时间索引
+                        if 'trade_date' in processed_df.columns:
+                            processed_df['trade_date'] = pd.to_datetime(processed_df['trade_date'])
+                            processed_df = processed_df.set_index('trade_date')
+                        
+                        result[stock_code] = processed_df
+                        logger.debug(f"从本地数据库获取{stock_code}数据: {len(processed_df)}条")
+                    else:
+                        stocks_need_fetch.append(stock_code)
+                        logger.debug(f"本地数据库无{stock_code}数据，需要从xtquant获取")
+                except Exception as e:
+                    logger.warning(f"从数据库获取{stock_code}数据失败: {e}")
+                    stocks_need_fetch.append(stock_code)
+            
+            # 如果有股票需要从xtquant获取，则批量获取
+            if stocks_need_fetch:
+                logger.info(f"从xtquant批量获取{len(stocks_need_fetch)}只股票数据")
+                history_data = await self.xtquant_service.get_history_data(
+                    stock_codes=stocks_need_fetch,
+                    period=Period.DAILY,
+                    start_date=start_date,
+                    end_date=end_date
+                )
+                
+                # 处理从xtquant获取的数据
+                for stock_code in stocks_need_fetch:
+                    df = history_data.get(stock_code)
+                    if df is not None and not df.empty:
+                        # 标准化列名
+                        df_processed = df.copy()
+                        
+                        # 确保必要的列存在
+                        required_columns = ['open', 'high', 'low', 'close', 'volume']
+                        for col in required_columns:
+                            if col not in df_processed.columns:
+                                logger.warning(f"股票{stock_code}缺少{col}列")
+                                df_processed[col] = 0
+                        
+                        # 重命名列以保持一致性
+                        column_mapping = {
+                            'open': 'open_price',
+                            'high': 'high_price', 
+                            'low': 'low_price',
+                            'close': 'close_price'
+                        }
+                        
+                        for old_col, new_col in column_mapping.items():
+                            if old_col in df_processed.columns:
+                                df_processed[new_col] = df_processed[old_col]
+                        
+                        # 添加股票代码列
+                        df_processed['stock_code'] = stock_code
+                        
+                        # 确保时间索引
+                        if 'time' in df_processed.columns:
+                            df_processed['trade_date'] = pd.to_datetime(df_processed['time']).dt.strftime('%Y-%m-%d')
+                        elif df_processed.index.name == 'time' or isinstance(df_processed.index, pd.DatetimeIndex):
+                            df_processed['trade_date'] = pd.to_datetime(df_processed.index).strftime('%Y-%m-%d')
+                        
+                        result[stock_code] = df_processed
+                        
+                        # 异步保存到数据库（不等待完成，避免阻塞）
+                        try:
+                            # 预处理数据用于保存
+                            save_df = self._preprocess_daily_data(df.copy(), stock_code)
+                            if not save_df.empty:
+                                asyncio.create_task(self._save_daily_data_to_db(save_df, stock_code))
+                        except Exception as save_e:
+                            logger.warning(f"保存{stock_code}数据到数据库失败: {save_e}")
+                    else:
+                        logger.warning(f"股票{stock_code}无历史数据")
+                        result[stock_code] = pd.DataFrame()
+            
+            # 确保所有股票都有结果
+            for stock_code in stock_codes:
+                if stock_code not in result:
+                    result[stock_code] = pd.DataFrame()
+            
+            logger.info(f"批量获取完成: 本地{len(result) - len(stocks_need_fetch)}只, xtquant{len(stocks_need_fetch)}只")
+            return result
+            
+        except Exception as e:
+            logger.error(f"批量获取历史数据失败: {e}, {traceback.format_exc()}")
+            return {stock_code: pd.DataFrame() for stock_code in stock_codes}
     
     async def get_market_overview(self) -> Dict[str, Any]:
         """获取市场概览"""

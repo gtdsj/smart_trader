@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/screener", tags=["股票筛选"])
 # 依赖注入
 def get_stock_screener() -> StockScreener:
     """获取选股筛选器实例"""
-    data_service = DataService()
+    data_service = DataService.get_instance()
     return StockScreener(data_service)
 
 
@@ -97,6 +97,10 @@ async def screen_stocks_by_strategy(
             date=request.date
         )
         
+        # 检查筛选结果是否成功
+        if not result["success"]:
+            raise HTTPException(status_code=400, detail=result["message"])
+        
         # 转换匹配的股票格式
         matched_stocks = []
         for stock in result["matched_stocks"]:
@@ -121,6 +125,8 @@ async def screen_stocks_by_strategy(
             "data": screening_result
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"策略筛选API错误: {e}")
         raise HTTPException(status_code=500, detail=f"策略筛选失败: {str(e)}")

@@ -93,14 +93,14 @@ class StrategyManager:
         """设置数据服务"""
         self.data_service = data_service
     
-    async def create_strategy(self, strategy_data: Dict[str, Any]) -> Dict[str, Any]:
+    def create_strategy(self, strategy_data: Dict[str, Any]) -> Dict[str, Any]:
         """创建策略"""
         try:
             db_gen = get_db()
             db = next(db_gen)
             try:
                 # 验证策略数据
-                validation_result = await self._validate_strategy_data(strategy_data)
+                validation_result = self._validate_strategy_data(strategy_data)
                 if not validation_result["valid"]:
                     return {
                         "success": False,
@@ -109,13 +109,19 @@ class StrategyManager:
                     }
                 
                 # 创建策略记录
+                parameters = strategy_data.get("parameters", {})
+                if isinstance(parameters, dict):
+                    parameters = json.dumps(parameters, ensure_ascii=False)
+                
+                # 注意：conditions字段在Strategy表中只是用于存储简单的条件描述
+                # 实际的条件数据存储在strategy_conditions表中
                 strategy_record = {
                     "name": strategy_data["name"],
                     "description": strategy_data.get("description", ""),
                     "strategy_type": strategy_data["strategy_type"],
                     "category": strategy_data["category"],
-                    "parameters": strategy_data.get("parameters", {}),
-                    "conditions": strategy_data.get("conditions", {}),
+                    "parameters": parameters,
+                    "conditions": "",  # 留空，实际条件存储在strategy_conditions表中
                     "priority": strategy_data.get("priority", 0),
                     "created_by": strategy_data.get("created_by", "system"),
                     "version": strategy_data.get("version", "1.0"),
@@ -129,7 +135,7 @@ class StrategyManager:
                 # 创建策略条件
                 conditions = strategy_data.get("conditions", [])
                 if conditions:
-                    await self._create_strategy_conditions(db, strategy_id, conditions)
+                    self._create_strategy_conditions(db, strategy_id, conditions)
                 
                 db.commit()
                 
@@ -150,16 +156,21 @@ class StrategyManager:
                 "data": None
             }
     
-    async def _create_strategy_conditions(self, db, strategy_id: int, 
+    def _create_strategy_conditions(self, db, strategy_id: int, 
                                         conditions: List[Dict[str, Any]]):
         """创建策略条件"""
         for i, condition in enumerate(conditions):
+            # 将value序列化为JSON字符串存储到数据库
+            value = condition["value"]
+            if isinstance(value, (dict, list)):
+                value = json.dumps(value, ensure_ascii=False)
+            
             condition_record = {
                 "strategy_id": strategy_id,
                 "condition_type": condition["condition_type"],
                 "indicator": condition["indicator"],
                 "operator": condition["operator"],
-                "value": condition["value"],
+                "value": value,
                 "logic_operator": condition.get("logic_operator", "AND"),
                 "order_index": i,
                 "is_active": condition.get("is_active", True)
@@ -168,7 +179,7 @@ class StrategyManager:
             stmt = insert(StrategyCondition).values(**condition_record)
             db.execute(stmt)
     
-    async def _validate_strategy_data(self, strategy_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_strategy_data(self, strategy_data: Dict[str, Any]) -> Dict[str, Any]:
         """验证策略数据"""
         try:
             # 必填字段检查
@@ -192,7 +203,7 @@ class StrategyManager:
             conditions = strategy_data.get("conditions", [])
             if conditions:
                 for condition in conditions:
-                    validation_result = await self._validate_condition(condition)
+                    validation_result = self._validate_condition(condition)
                     if not validation_result["valid"]:
                         return validation_result
             
@@ -204,7 +215,7 @@ class StrategyManager:
                 "message": f"验证过程出错: {str(e)}"
             }
     
-    async def _validate_condition(self, condition: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_condition(self, condition: Dict[str, Any]) -> Dict[str, Any]:
         """验证单个条件"""
         try:
             # 必填字段检查
@@ -237,15 +248,30 @@ class StrategyManager:
             indicator = condition["indicator"]
             
             if condition_type in ["technical", "fundamental"]:
-                indicator_validation = self.indicator_manager.validate_indicator(indicator, condition_type)
-                if not indicator_validation["valid"]:
-                    return indicator_validation
+                # 检查指标是否存在
+                indicator_info = self.indicator_manager.get_indicator_info(indicator)
+                if not indicator_info:
+                    return {
+                        "valid": False,
+                        "message": f"未知的指标: {indicator}"
+                    }
+                
+                # 验证指标参数
+                parameters = condition.get("parameters", {})
+                param_validation = self.indicator_manager.validate_indicator_parameters(indicator, parameters)
+                if not param_validation["valid"]:
+                    return param_validation
             
             # 验证操作符的值
             value = condition.get("value")
             operator = condition["operator"]
+            
+            # 添加调试信息
+            logger.info(f"验证条件: {condition.get('indicator')} {operator} {value} (类型: {type(value)})")
+            
             operator_validation = self.operator_manager.validate_operator_value(operator, value)
             if not operator_validation["valid"]:
+                logger.error(f"操作符验证失败: {operator_validation}")
                 return operator_validation
             
             return {"valid": True, "message": "条件验证通过"}

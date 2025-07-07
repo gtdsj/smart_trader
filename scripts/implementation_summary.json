@@ -1,0 +1,45 @@
+{
+  "total_conditions": 11,
+  "implemented_conditions": [
+    "非科创板股票筛选",
+    "非北交所股票筛选",
+    "价格涨跌幅筛选",
+    "移动平均线角度计算",
+    "最低价高于均线检查"
+  ],
+  "need_implementation": [
+    {
+      "condition": "连续3个交易日收盘价不低于5日均线",
+      "status": "需要实现连续条件检查逻辑",
+      "complexity": "中等"
+    },
+    {
+      "condition": "最近两个交易日收盘价都高于开盘价",
+      "status": "需要实现连续条件检查逻辑",
+      "complexity": "简单"
+    }
+  ],
+  "need_data_source": [
+    {
+      "condition": "非ST股票筛选",
+      "required_data": "股票名称数据或ST标识",
+      "complexity": "简单（数据获取）"
+    },
+    {
+      "condition": "非破板股筛选",
+      "required_data": "涨停板数据和破板标识",
+      "complexity": "中等（数据获取）"
+    },
+    {
+      "condition": "主力资金净流入",
+      "required_data": "主力资金流向数据",
+      "complexity": "高（数据获取）"
+    }
+  ],
+  "recommendations": [
+    "优先实现基于现有数据的条件（连续条件检查）",
+    "接入更多数据源以支持ST股、破板股、资金流等条件",
+    "考虑使用第三方数据服务（如Wind、东方财富等）",
+    "建立数据质量监控机制确保策略的可靠性"
+  ]
+}

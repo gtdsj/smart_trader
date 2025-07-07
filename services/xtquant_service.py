@@ -619,7 +619,7 @@ class XtQuantService:
         """获取历史数据"""
         try:
             # 检查是否为模拟模式
-            if self.settings.xtquant.mock_mode or xtdata is None or not self.data_connected:
+            if self.settings.xtquant.mock_mode or xtdata is None or not self.is_data_connected:
                 logger.info("使用模拟历史数据")
                 return await self._get_mock_historical_data(stock_code, start_date, end_date, period)
             
@@ -667,7 +667,7 @@ class XtQuantService:
                         return {"success": False, "error": "未获取到数据"}
                         
                 except Exception as e:
-                    logger.error(f"获取历史数据失败: {e}")
+                    logger.error(f"获取历史数据失败: {traceback.format_exc()}")
                     return {"success": False, "error": str(e)}
             
             # 在线程池中执行

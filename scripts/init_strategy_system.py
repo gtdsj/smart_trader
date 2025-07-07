@@ -239,18 +239,19 @@ def create_sample_strategies():
 def initialize_services():
     """初始化服务实例"""
     try:
-        # 创建服务实例
+        # 创建服务实例（DataService使用单例模式）
         xtquant_service = XtQuantService()
-        data_service = DataService()
+        data_service = DataService.get_instance()  # 使用单例获取方法
         strategy_manager = StrategyManager()
         strategy_executor = StrategyExecutor()
         
         # 设置服务依赖关系
-        data_service.set_xtquant_service(xtquant_service)
+        if hasattr(data_service, 'set_xtquant_service'):
+            data_service.set_xtquant_service(xtquant_service)
         strategy_executor.set_data_service(data_service)
         strategy_executor.set_strategy_manager(strategy_manager)
         
-        logger.info("服务实例初始化完成")
+        logger.info("服务实例初始化完成（DataService使用单例模式）")
         
         return {
             "xtquant_service": xtquant_service,

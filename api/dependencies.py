@@ -10,8 +10,8 @@ from services.scheduler_service import SchedulerService
 
 
 def get_data_service() -> DataService:
-    """获取数据服务实例"""
-    return DataService()
+    """获取数据服务实例（单例模式）"""
+    return DataService.get_instance()
 
 
 def get_optimized_backfill_service() -> OptimizedBackfillService:
