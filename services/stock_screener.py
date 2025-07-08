@@ -20,6 +20,7 @@ from services.strategy_manager import StrategyManager
 from services.strategy_expression_parser import StrategyExpressionParser
 from services.indicator_manager import IndicatorManager
 from services.operator_manager import OperatorManager
+from services.custom_condition_manager import get_custom_condition_manager
 
 
 class StockScreener:
@@ -32,6 +33,7 @@ class StockScreener:
         self.expression_parser = StrategyExpressionParser()
         self.indicator_manager = IndicatorManager()
         self.operator_manager = OperatorManager()
+        self.custom_condition_manager = get_custom_condition_manager()
         
         # 设置数据服务
         self.strategy_manager.set_data_service(self.data_service)
@@ -490,8 +492,11 @@ class StockScreener:
             if stock_data.empty:
                 return {"matched": False, "symbol": symbol, "reason": "无数据"}
             
+            # 为股票数据添加股票代码信息
+            stock_data.attrs = {'stock_code': symbol}
+            
             # 评估策略条件
-            conditions = strategy.get("conditions", [])
+            conditions = strategy.get("condition_details", [])
             if not conditions:
                 return {"matched": False, "symbol": symbol, "reason": "无策略条件"}
             
@@ -613,6 +618,10 @@ class StockScreener:
                 if indicator not in stock_data.columns:
                     return False
                 indicator_value = stock_data[indicator].iloc[-1]
+            elif condition_type == "custom":
+                # 处理自定义条件
+                stock_code = getattr(stock_data, 'attrs', {}).get('stock_code', '')
+                return self.custom_condition_manager.evaluate_custom_condition(condition, stock_data, stock_code)
             else:
                 return False
             
@@ -681,6 +690,7 @@ class StockScreener:
             'close_prices': {},
             'high_prices': {},
             'low_prices': {},
+            'open_prices': {},
             'volumes': {},
             'stock_codes': [],
             'valid_stocks': []
@@ -694,6 +704,7 @@ class StockScreener:
             matrices['close_prices'][stock_code] = stock_data['close_price']
             matrices['high_prices'][stock_code] = stock_data['high_price']
             matrices['low_prices'][stock_code] = stock_data['low_price']
+            matrices['open_prices'][stock_code] = stock_data.get('open_price', stock_data['close_price'])
             matrices['volumes'][stock_code] = stock_data['volume']
             matrices['valid_stocks'].append(stock_code)
         
@@ -807,6 +818,29 @@ class StockScreener:
                         if indicator == "volume":
                             indicator_value = stock_matrices['volumes'][stock_code].iloc[-1]
                         else:
+                            condition_results[stock_code].append(False)
+                            continue
+                    elif condition_type == "custom":
+                        # 处理自定义条件
+                        try:
+                            # 构建股票数据DataFrame
+                            stock_data = pd.DataFrame({
+                                'close_price': stock_matrices['close_prices'][stock_code],
+                                'high_price': stock_matrices['high_prices'][stock_code],
+                                'low_price': stock_matrices['low_prices'][stock_code],
+                                'open_price': stock_matrices.get('open_prices', {}).get(stock_code, stock_matrices['close_prices'][stock_code]),
+                                'volume': stock_matrices['volumes'][stock_code]
+                            })
+                            
+                            # 添加股票代码信息
+                            stock_data.attrs = {'stock_code': stock_code}
+                            
+                            # 评估自定义条件
+                            result = self.custom_condition_manager.evaluate_custom_condition(condition, stock_data, stock_code)
+                            condition_results[stock_code].append(result)
+                            continue
+                        except Exception as e:
+                            logger.error(f"评估股票 {stock_code} 自定义条件失败: {e}")
                             condition_results[stock_code].append(False)
                             continue
                     else:
