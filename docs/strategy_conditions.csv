@@ -1,0 +1,13 @@
+id,strategy_id,condition_type,indicator,operator,value,logic_operator,order_index,is_active,created_at
+1,1,custom,consecutive_close_above_ma5,==,true,AND,0,true,2025-07-07 00:57:17.698
+2,1,custom,is_kcb_stock,==,false,AND,1,true,2025-07-07 00:57:17.698
+3,1,custom,is_bse_stock,==,false,AND,2,true,2025-07-07 00:57:17.698
+4,1,technical,price_change_pct,between,"{""min"": -5.0, ""max"": 6.1}",AND,3,true,2025-07-07 00:57:17.698
+5,1,custom,is_st_stock,==,false,AND,4,true,2025-07-07 00:57:17.698
+6,1,custom,consecutive_close_above_open,==,true,AND,5,true,2025-07-07 00:57:17.698
+7,1,custom,ma5_angle_consecutive,>,20,AND,6,true,2025-07-07 00:57:17.698
+8,1,custom,ma5_angle_latest,>,50,AND,7,true,2025-07-07 00:57:17.698
+9,1,custom,ma10_angle_consecutive,>,10,AND,8,true,2025-07-07 00:57:17.698
+10,1,custom,is_break_board,==,false,AND,9,true,2025-07-07 00:57:17.698
+11,1,custom,main_fund_inflow,==,true,AND,10,true,2025-07-07 00:57:17.698
+12,1,custom,low_above_ma5,==,true,AND,11,true,2025-07-07 00:57:17.698
