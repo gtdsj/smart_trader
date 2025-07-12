@@ -173,7 +173,8 @@ class StrategyManager:
                 "value": value,
                 "logic_operator": condition.get("logic_operator", "AND"),
                 "order_index": i,
-                "is_active": condition.get("is_active", True)
+                "is_active": condition.get("is_active", True),
+                "parameters": condition.get("parameters", "")
             }
             
             stmt = insert(StrategyCondition).values(**condition_record)
@@ -336,8 +337,8 @@ class StrategyManager:
             db = next(db_gen)
             try:
                 query = select(Strategy).options(
-                    selectinload(Strategy.strategy_conditions)
-                ).where(Strategy.id == strategy_id)
+                    selectinload(Strategy.strategy_conditions.and_(StrategyCondition.is_active == True))
+                ).where( Strategy.id == strategy_id)
                 
                 result = db.execute(query)
                 strategy = result.scalar_one_or_none()
@@ -348,15 +349,20 @@ class StrategyManager:
                 # 获取条件详情
                 conditions = []
                 for condition in strategy.strategy_conditions:
+                    try:
+                        val = json.loads(condition.value)
+                    except json.JSONDecodeError:
+                        val = condition.value
                     conditions.append({
                         "id": condition.id,
                         "condition_type": condition.condition_type,
                         "indicator": condition.indicator,
                         "operator": condition.operator,
-                        "value": condition.value,
+                        "value": val,
                         "logic_operator": condition.logic_operator,
                         "order_index": condition.order_index,
-                        "is_active": condition.is_active
+                        "is_active": condition.is_active,
+                        "parameters": json.loads(condition.parameters) if condition.parameters else {}
                     })
                 
                 return {

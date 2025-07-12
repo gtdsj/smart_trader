@@ -111,7 +111,6 @@ class ConsecutiveCloseAboveMACondition(CustomConditionBase):
             # 检查最近consecutive_days天收盘价是否都不低于5日均线
             recent_data = stock_data.tail(consecutive_days)
             recent_ma5 = ma5.tail(consecutive_days)
-            
             return 1 if all(recent_data['close_price'] >= recent_ma5) else 0
             
         except Exception as e:
@@ -164,8 +163,7 @@ class IsBSEStockCondition(CustomConditionBase):
             if not stock_code and hasattr(stock_data, 'attrs') and 'stock_code' in stock_data.attrs:
                 stock_code = stock_data.attrs['stock_code']
             
-            # 北交所股票代码以8开头且为3位数字
-            return 1 if (stock_code.startswith('8') and len(stock_code) >= 6 and stock_code[:3].isdigit()) else 0
+            return 1 if (stock_code[:2] in {'83', '87', '88', '92'}) else 0
             
         except Exception as e:
             logger.error(f"判断北交所股票失败: {e}")

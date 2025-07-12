@@ -349,6 +349,7 @@ class StrategyCondition(Base):
     order_index = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
+    parameters = Column(String(1024), nullable=False)
     
     # 关系
     strategy = relationship("Strategy", back_populates="strategy_conditions")
