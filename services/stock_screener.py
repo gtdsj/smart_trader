@@ -40,7 +40,7 @@ class StockScreener:
         
         # 并发配置
         self.max_workers = 10  # 最大并发数
-        self.batch_size = 50   # 批处理大小
+        self.batch_size = 1000   # 批处理大小
     
     async def screen_stocks_by_strategy(self, strategy_id: int, stock_list: List[str] = None, 
                                       date: str = None) -> Dict[str, Any]:
@@ -769,6 +769,8 @@ class StockScreener:
                         indicator_results[indicator][stock_code] = atr_value.iloc[-1] if not atr_value.empty else None
                         
                     else:
+                        logger.info(f"其他指标: {indicator}")
+
                         # 其他指标使用原有方法
                         stock_data = pd.DataFrame({
                             'close_price': close_prices,

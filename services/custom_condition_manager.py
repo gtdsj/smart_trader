@@ -86,11 +86,11 @@ class CustomConditionBase(ABC):
         return value
 
 
-class ConsecutiveCloseAboveMA5Condition(CustomConditionBase):
-    """连续N个交易日收盘价高于MA5"""
+class ConsecutiveCloseAboveMACondition(CustomConditionBase):
+    """连续N个交易日收盘价高于MA"""
     
     def __init__(self, parameters: Optional[Dict[str, Any]] = None):
-        super().__init__("consecutive_close_above_ma5", "连续收盘价高于MA5", parameters)
+        super().__init__("consecutive_close_above_ma", "连续N天收盘价高于MA", parameters)
     
     def _parse_parameters(self):
         """解析参数"""
@@ -119,7 +119,7 @@ class ConsecutiveCloseAboveMA5Condition(CustomConditionBase):
             return 0
     
     def get_name(self) -> str:
-        return "consecutive_close_above_ma5"
+        return "consecutive_close_above_ma"
     
     def get_description(self) -> str:
         return "连续N个交易日收盘价不低于5日均线"
@@ -235,11 +235,11 @@ class ConsecutiveCloseAboveOpenCondition(CustomConditionBase):
         return "连续N个交易日收盘价都高于开盘价"
 
 
-class MA5AngleConsecutiveCondition(CustomConditionBase):
-    """连续N个交易日五日均线角度大于阈值"""
+class MAAngleConsecutiveCondition(CustomConditionBase):
+    """连续N个交易日X日均线角度大于阈值Y"""
     
     def __init__(self, parameters: Optional[Dict[str, Any]] = None):
-        super().__init__("ma5_angle_consecutive", "连续N个交易日五日均线角度大于阈值", parameters)
+        super().__init__("ma5_angle_consecutive", "连续N个交易日X日均线角度大于阈值", parameters)
     
     def _parse_parameters(self):
         """解析参数"""
@@ -260,39 +260,14 @@ class MA5AngleConsecutiveCondition(CustomConditionBase):
             如果return_type='average': 返回连续N天的平均角度
         """
         try:
-            # 使用传入的参数或默认参数
-            if parameters:
-                ma_period = parameters.get('ma_period', self.ma_period)
-                consecutive_days = parameters.get('consecutive_days', self.consecutive_days)
-                threshold = parameters.get('threshold', self.threshold)
-                return_type = parameters.get('return_type', self.return_type)
-            else:
-                ma_period = self.ma_period
-                consecutive_days = self.consecutive_days
-                threshold = self.threshold
-                return_type = self.return_type
-            
-            # 使用工具类检查连续条件
-            if return_type == 'boolean':
-                # 检查连续N天是否都满足条件
-                result = MovingAverageCalculator.check_ma_consecutive_condition(
-                    stock_data, 
-                    ma_period=ma_period,
-                    consecutive_days=consecutive_days,
-                    threshold=threshold
-                )
-                return self._convert_value_type(1 if result else 0)
-            else:
-                # 返回连续N天的平均角度
-                angles = MovingAverageCalculator.calculate_ma_angles_consecutive(
-                    stock_data,
-                    ma_period=ma_period,
-                    consecutive_days=consecutive_days
-                )
-                if angles:
-                    avg_angle = sum(angles) / len(angles)
-                    return self._convert_value_type(avg_angle)
-                return 0.0
+            # 检查连续N天是否都满足条件
+            result = MovingAverageCalculator.check_ma_consecutive_condition(
+                stock_data, 
+                ma_period=self.ma_period,
+                consecutive_days=self.consecutive_days,
+                threshold=self.threshold
+            )
+            return self._convert_value_type(1 if result else 0)
             
         except Exception as e:
             logger.error(f"计算MA{self.ma_period}连续角度失败: {e}")
@@ -301,7 +276,7 @@ class MA5AngleConsecutiveCondition(CustomConditionBase):
             return 0 if self.return_type == 'boolean' else 0.0
     
     def get_name(self) -> str:
-        return "ma5_angle_consecutive"
+        return "ma_angle_consecutive"
     
     def get_description(self) -> str:
         if self.return_type == 'boolean':
@@ -310,11 +285,11 @@ class MA5AngleConsecutiveCondition(CustomConditionBase):
             return f"计算{self.ma_period}日移动平均线连续{self.consecutive_days}天的平均角度（度数）"
 
 
-class MA5AngleLatestCondition(CustomConditionBase):
+class MAAngleLatestCondition(CustomConditionBase):
     """最近一个交易日五日均线角度大于阈值"""
     
     def __init__(self, parameters: Optional[Dict[str, Any]] = None):
-        super().__init__("ma5_angle_latest", "最近一个交易日五日均线角度大于阈值", parameters)
+        super().__init__("ma_angle_latest", "最近一个交易日N日均线角度大于阈值X", parameters)
     
     def _parse_parameters(self):
         """解析参数"""
@@ -331,7 +306,7 @@ class MA5AngleLatestCondition(CustomConditionBase):
                 stock_data, ma_period=ma_period
             )
             
-            return self._convert_value_type(angle)
+            return self._convert_value_type(1 if angle > self.threshold else 0)
             
         except Exception as e:
             logger.error(f"计算MA{self.ma_period}最新角度失败: {e}")
@@ -340,86 +315,10 @@ class MA5AngleLatestCondition(CustomConditionBase):
             return 0.0
     
     def get_name(self) -> str:
-        return "ma5_angle_latest"
+        return "ma_angle_latest"
     
     def get_description(self) -> str:
         return f"计算{self.ma_period}日移动平均线的最新角度（度数）"
-
-
-class MA10AngleConsecutiveCondition(CustomConditionBase):
-    """连续N个交易日十日均线角度大于阈值"""
-    
-    def __init__(self, parameters: Optional[Dict[str, Any]] = None):
-        super().__init__("ma10_angle_consecutive", "连续N个交易日十日均线角度大于阈值", parameters)
-    
-    def _parse_parameters(self):
-        """解析参数"""
-        self.ma_period = self.get_parameter('ma_period', 10)
-        self.consecutive_days = self.get_parameter('consecutive_days', 3)
-        self.threshold = self.get_parameter('threshold', 0.0)
-        self.return_type = self.get_parameter('return_type', 'boolean')  # 'boolean' 或 'average'
-    
-    def calculate(self, stock_data: pd.DataFrame, parameters: Dict[str, Any] = None) -> Any:
-        """检查MA连续N天是否都满足角度条件
-        
-        Args:
-            stock_data: 股票数据
-            parameters: 参数字典（可选，会覆盖初始化参数）
-            
-        Returns:
-            如果return_type='boolean': 返回0/1（是否连续满足条件）
-            如果return_type='average': 返回连续N天的平均角度
-        """
-        try:
-            # 使用传入的参数或默认参数
-            if parameters:
-                ma_period = parameters.get('ma_period', self.ma_period)
-                consecutive_days = parameters.get('consecutive_days', self.consecutive_days)
-                threshold = parameters.get('threshold', self.threshold)
-                return_type = parameters.get('return_type', self.return_type)
-            else:
-                ma_period = self.ma_period
-                consecutive_days = self.consecutive_days
-                threshold = self.threshold
-                return_type = self.return_type
-            
-            # 使用工具类检查连续条件
-            if return_type == 'boolean':
-                # 检查连续N天是否都满足条件
-                result = MovingAverageCalculator.check_ma_consecutive_condition(
-                    stock_data, 
-                    ma_period=ma_period,
-                    consecutive_days=consecutive_days,
-                    threshold=threshold
-                )
-                return self._convert_value_type(1 if result else 0)
-            else:
-                # 返回连续N天的平均角度
-                angles = MovingAverageCalculator.calculate_ma_angles_consecutive(
-                    stock_data,
-                    ma_period=ma_period,
-                    consecutive_days=consecutive_days
-                )
-                if angles:
-                    avg_angle = sum(angles) / len(angles)
-                    return self._convert_value_type(avg_angle)
-                return 0.0
-            
-        except Exception as e:
-            logger.error(f"计算MA{self.ma_period}连续角度失败: {e}")
-            import traceback
-            logger.error(f"错误堆栈: {traceback.format_exc()}")
-            return 0 if self.return_type == 'boolean' else 0.0
-    
-    def get_name(self) -> str:
-        return "ma10_angle_consecutive"
-    
-    def get_description(self) -> str:
-        if self.return_type == 'boolean':
-            return f"检查{self.ma_period}日移动平均线连续{self.consecutive_days}天是否都大于{self.threshold}度"
-        else:
-            return f"计算{self.ma_period}日移动平均线连续{self.consecutive_days}天的平均角度（度数）"
-
 
 class IsBreakBoardCondition(CustomConditionBase):
     """判断是否为破板股"""
@@ -478,11 +377,11 @@ class MainFundInflowCondition(CustomConditionBase):
         return "主力资金净流入"
 
 
-class LowAboveMA5Condition(CustomConditionBase):
-    """最低价高于MA5"""
+class LowAboveMACondition(CustomConditionBase):
+    """最低价高于MA"""
     
     def __init__(self, parameters: Optional[Dict[str, Any]] = None):
-        super().__init__("low_above_ma5", "最低价高于MA5", parameters)
+        super().__init__("low_above_ma", "最低价高于MA", parameters)
     
     def _parse_parameters(self):
         """解析参数"""
@@ -509,7 +408,7 @@ class LowAboveMA5Condition(CustomConditionBase):
             return 0
     
     def get_name(self) -> str:
-        return "low_above_ma5"
+        return "low_above_ma"
     
     def get_description(self) -> str:
         return "最近一个交易日最低股价高于五日均线"
@@ -525,17 +424,16 @@ class CustomConditionManager:
     def _register_default_conditions(self):
         """注册默认的自定义条件"""
         default_conditions = [
-            ConsecutiveCloseAboveMA5Condition(),
+            ConsecutiveCloseAboveMACondition(),
             IsKCBStockCondition(),
             IsBSEStockCondition(),
             IsSTStockCondition(),
             ConsecutiveCloseAboveOpenCondition(),
-            MA5AngleConsecutiveCondition(),
-            MA5AngleLatestCondition(),
-            MA10AngleConsecutiveCondition(),
+            MAAngleConsecutiveCondition(),
+            MAAngleLatestCondition(),
             IsBreakBoardCondition(),
             MainFundInflowCondition(),
-            LowAboveMA5Condition()
+            LowAboveMACondition()
         ]
         
         for condition in default_conditions:
@@ -554,12 +452,11 @@ class CustomConditionManager:
         try:
             # 条件类映射
             condition_classes = {
-                'consecutive_close_above_ma5': ConsecutiveCloseAboveMA5Condition,
+                'consecutive_close_above_ma': ConsecutiveCloseAboveMACondition,
                 'consecutive_close_above_open': ConsecutiveCloseAboveOpenCondition,
-                'ma5_angle_consecutive': MA5AngleConsecutiveCondition,
-                'ma5_angle_latest': MA5AngleLatestCondition,
-                'ma10_angle_consecutive': MA10AngleConsecutiveCondition,
-                'low_above_ma5': LowAboveMA5Condition,
+                'ma_angle_consecutive': MAAngleConsecutiveCondition,
+                'ma_angle_latest': MAAngleLatestCondition,
+                'low_above_ma': LowAboveMACondition,
                 'is_kcb_stock': IsKCBStockCondition,
                 'is_bse_stock': IsBSEStockCondition,
                 'is_st_stock': IsSTStockCondition,
