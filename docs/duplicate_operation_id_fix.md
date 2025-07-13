@@ -21,7 +21,7 @@ Duplicate Operation ID get_notification_statistics_api_v1_notification_statistic
 
 1. **旧的路由系统**：直接在根级API目录下的路由文件
    - `api/trading_routes.py`
-   - `api/strategy_routes.py`
+   - `api/strategy_routes.py` (已删除，功能整合到 api/business/strategy.py)
    - `api/backtest_routes.py`
    - `api/notification_routes.py`
    - `api/strategy_manager_routes.py`
@@ -65,7 +65,8 @@ from api.strategy_manager_routes import (
     set_strategy_manager,
     set_strategy_executor
 )
-from api.strategy_routes import router as strategy_router, set_strategy_service
+# from api.strategy_routes import router as strategy_router, set_strategy_service
+# 注意：strategy_routes.py 已删除，功能整合到 api/business/strategy.py
 from api.backtest_routes import router as backtest_router, set_backtest_service
 from api.notification_routes import router as notification_router, set_notification_service
 ```

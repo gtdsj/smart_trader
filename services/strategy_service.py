@@ -106,7 +106,7 @@ class StrategyService:
                 
                 result = db.execute(query)
                 strategies = result.scalars().all()
-                
+
                 return [
                     {
                         "id": strategy.id,
@@ -933,6 +933,40 @@ class StrategyService:
             score += 10
         
         return score
+    
+    async def get_strategy_statistics(self) -> Dict[str, Any]:
+        """获取策略统计信息"""
+        try:
+            strategies = await self.get_strategies()
+            active_strategies = [s for s in strategies if s["is_active"]]
+            
+            # 统计策略类型
+            strategy_types = set()
+            for strategy in strategies:
+                strategy_types.add(strategy["strategy_type"])
+            
+            return {
+                "total_strategies": len(strategies),
+                "active_strategies": len(active_strategies),
+                "inactive_strategies": len(strategies) - len(active_strategies),
+                "available_strategy_types": len(strategy_types)
+            }
+        except Exception as e:
+            logger.error(f"获取策略统计信息失败: {e}, {traceback.format_exc()}")
+            return {
+                "total_strategies": 0,
+                "active_strategies": 0,
+                "inactive_strategies": 0,
+                "available_strategy_types": 0
+            }
+    
+    def get_available_strategy_types(self) -> List[str]:
+        """获取可用的策略类型"""
+        return [strategy_type.value for strategy_type in StrategyType]
+    
+    def get_available_strategies(self) -> List[str]:
+        """获取可用的策略实现"""
+        return list(self.strategies.keys())
     
     async def stop(self):
         """停止策略服务"""

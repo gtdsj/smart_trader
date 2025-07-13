@@ -105,7 +105,7 @@ api/
 ├── data_backfill_routes.py     # 传统补全路由
 ├── optimized_backfill_routes.py # 优化补全路由
 ├── trading_routes.py
-├── strategy_routes.py
+├── strategy_routes.py          # 已删除，功能整合到 api/business/strategy.py
 └── ...
 ```
 
@@ -115,7 +115,7 @@ api/
 ├── unified_backfill_routes.py  # 统一补全路由
 ├── dependencies.py             # 依赖注入
 ├── trading_routes.py
-├── strategy_routes.py
+├── strategy_routes.py          # 已删除，功能整合到 api/business/strategy.py
 ├── business/
 │   ├── data.py                # 数据业务路由
 │   └── ...

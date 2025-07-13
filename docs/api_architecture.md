@@ -141,7 +141,7 @@
 - 策略扫描
 - 性能分析
 
-**文件**: `api/strategy_routes.py`
+**文件**: `api/strategy_routes.py` (已删除，功能整合到业务模块)
 
 ### 回测服务模块 (`/api/v1/backtest/`)
 
@@ -178,7 +178,7 @@ api/
 ├── config.py                   # 配置管理路由
 ├── trading_routes.py           # 交易服务路由
 ├── data_routes.py              # 数据服务路由
-├── strategy_routes.py          # 策略服务路由
+# strategy_routes.py 已删除，功能整合到 api/business/strategy.py
 ├── backtest_routes.py          # 回测服务路由
 ├── notification_routes.py      # 通知服务路由
 ├── config_routes.py            # 配置路由（旧版，待迁移）

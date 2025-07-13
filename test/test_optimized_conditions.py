@@ -14,12 +14,7 @@ import numpy as np
 from loguru import logger
 from services.custom_condition_manager import (
     CustomConditionManager,
-    MA5AngleLatestCondition,
-    MA5AngleConsecutiveCondition,
-    MA10AngleConsecutiveCondition,
-    ConsecutiveCloseAboveMA5Condition,
-    ConsecutiveCloseAboveOpenCondition,
-    LowAboveMA5Condition
+    ConsecutiveCloseAboveOpenCondition
 )
 from utils.ma_calculator import MovingAverageCalculator
 
@@ -109,68 +104,13 @@ def test_condition_with_parameters():
         # 创建测试数据
         stock_data = create_test_stock_data(20)
         
-        # 测试MA5AngleLatestCondition
-        logger.info("\n--- 测试MA5AngleLatestCondition ---")
-        
-        # 默认参数
-        condition1 = MA5AngleLatestCondition()
-        result1 = condition1.calculate(stock_data)
-        logger.info(f"默认参数(MA5): {result1:.2f}度")
-        
-        # 自定义参数
-        params = {'ma_period': 10, 'threshold': 1.0}
-        condition2 = MA5AngleLatestCondition(parameters=params)
-        result2 = condition2.calculate(stock_data)
-        logger.info(f"自定义参数(MA10): {result2:.2f}度")
-        logger.info(f"条件描述: {condition2.get_description()}")
-        
-        # 测试MA5AngleConsecutiveCondition
-        logger.info("\n--- 测试MA5AngleConsecutiveCondition ---")
-        
-        # 布尔类型返回
-        params_bool = {
-            'ma_period': 5,
-            'consecutive_days': 3,
-            'threshold': 0.0,
-            'return_type': 'boolean'
-        }
-        condition3 = MA5AngleConsecutiveCondition(parameters=params_bool)
-        result3 = condition3.calculate(stock_data)
-        logger.info(f"布尔类型返回(连续3天MA5>0度): {result3}")
-        logger.info(f"条件描述: {condition3.get_description()}")
-        
-        # 平均角度返回
-        params_avg = {
-            'ma_period': 5,
-            'consecutive_days': 3,
-            'threshold': 0.0,
-            'return_type': 'average'
-        }
-        condition4 = MA5AngleConsecutiveCondition(parameters=params_avg)
-        result4 = condition4.calculate(stock_data)
-        logger.info(f"平均角度返回(连续3天MA5平均角度): {result4:.2f}度")
-        logger.info(f"条件描述: {condition4.get_description()}")
-        
-        # 测试其他条件
-        logger.info("\n--- 测试其他条件 ---")
-        
-        # 连续收盘价高于MA5
-        params_close = {'ma_period': 5, 'consecutive_days': 2}
-        condition5 = ConsecutiveCloseAboveMA5Condition(parameters=params_close)
-        result5 = condition5.calculate(stock_data)
-        logger.info(f"连续2天收盘价高于MA5: {result5}")
-        
-        # 连续收盘价高于开盘价
+        # 测试连续收盘价高于开盘价
+        logger.info("\n--- 测试ConsecutiveCloseAboveOpenCondition ---")
         params_open = {'consecutive_days': 3}
-        condition6 = ConsecutiveCloseAboveOpenCondition(parameters=params_open)
-        result6 = condition6.calculate(stock_data)
-        logger.info(f"连续3天收盘价高于开盘价: {result6}")
-        
-        # 最低价高于MA5
-        params_low = {'ma_period': 5}
-        condition7 = LowAboveMA5Condition(parameters=params_low)
-        result7 = condition7.calculate(stock_data)
-        logger.info(f"最低价高于MA5: {result7}")
+        condition = ConsecutiveCloseAboveOpenCondition(parameters=params_open)
+        result = condition.calculate(stock_data)
+        logger.info(f"连续3天收盘价高于开盘价: {result}")
+        logger.info(f"条件描述: {condition.get_description()}")
         
         logger.info("✅ 带参数的条件类测试通过")
         return True
@@ -193,43 +133,23 @@ def test_condition_manager_with_parameters():
         # 测试create_condition_with_parameters方法
         logger.info("\n--- 测试create_condition_with_parameters ---")
         
-        # 创建带参数的MA5角度条件
+        # 创建带参数的连续收盘价高于开盘价条件
         params1 = {
-            'ma_period': 5,
-            'threshold': 1.0
+            'consecutive_days': 3
         }
-        condition1 = manager.create_condition_with_parameters('ma5_angle_latest', params1)
+        condition1 = manager.create_condition_with_parameters('consecutive_close_above_open', params1)
         if condition1:
-            logger.info(f"创建MA5角度条件成功: {condition1.get_description()}")
+            logger.info(f"创建连续收盘价高于开盘价条件成功: {condition1.get_description()}")
             logger.info(f"参数: {condition1.parameters}")
         
-        # 创建带参数的MA5连续角度条件
-        params2 = {
-            'ma_period': 5,
-            'consecutive_days': 4,
-            'threshold': 0.5,
-            'return_type': 'boolean'
-        }
-        condition2 = manager.create_condition_with_parameters('ma5_angle_consecutive', params2)
-        if condition2:
-            logger.info(f"创建MA5连续角度条件成功: {condition2.get_description()}")
-            logger.info(f"参数: {condition2.parameters}")
-        
-        # 创建带参数的MA10连续角度条件
-        params3 = {
-            'ma_period': 10,
-            'consecutive_days': 5,
-            'threshold': 1.0,
-            'return_type': 'boolean'
-        }
-        condition3 = manager.create_condition_with_parameters('ma10_angle_consecutive', params3)
-        if condition3:
-            logger.info(f"创建MA10连续角度条件成功: {condition3.get_description()}")
-            logger.info(f"参数: {condition3.parameters}")
+        # 测试其他可用条件
+        logger.info("\n--- 测试其他可用条件 ---")
+        available_conditions = manager.get_available_conditions()
+        logger.info(f"可用条件: {available_conditions}")
         
         # 测试未知条件
-        condition4 = manager.create_condition_with_parameters('unknown_condition', {})
-        if condition4 is None:
+        condition2 = manager.create_condition_with_parameters('unknown_condition', {})
+        if condition2 is None:
             logger.info("未知条件正确返回None")
         
         logger.info("✅ CustomConditionManager参数支持测试通过")
@@ -251,42 +171,18 @@ def test_database_parameters_simulation():
         db_conditions = [
             {
                 'id': 1,
-                'indicator': 'ma5_angle_latest',
-                'value': '1.5',
+                'indicator': 'consecutive_close_above_open',
+                'value': '3',
                 'parameters': json.dumps({
-                    'ma_period': 5,
-                    'threshold': 1.5
+                    'consecutive_days': 3
                 })
             },
             {
                 'id': 2,
-                'indicator': 'ma5_angle_consecutive',
-                'value': '0.8',
+                'indicator': 'consecutive_close_above_open',
+                'value': '2',
                 'parameters': json.dumps({
-                    'ma_period': 5,
-                    'consecutive_days': 3,
-                    'threshold': 0.8,
-                    'return_type': 'boolean'
-                })
-            },
-            {
-                'id': 3,
-                'indicator': 'ma10_angle_consecutive',
-                'value': '1.0',
-                'parameters': json.dumps({
-                    'ma_period': 10,
-                    'consecutive_days': 4,
-                    'threshold': 1.0,
-                    'return_type': 'average'
-                })
-            },
-            {
-                'id': 4,
-                'indicator': 'consecutive_close_above_ma5',
-                'value': '3',
-                'parameters': json.dumps({
-                    'ma_period': 5,
-                    'consecutive_days': 3
+                    'consecutive_days': 2
                 })
             }
         ]
@@ -346,57 +242,21 @@ def test_logic_fix_verification():
         stock_data.loc[10:, 'close'] = [11.0, 11.2, 11.5, 11.8, 12.0]  # 明显上升
         stock_data.loc[10:, 'close_price'] = stock_data.loc[10:, 'close']
         
-        logger.info("\n--- 验证MA5AngleConsecutiveCondition逻辑修复 ---")
+        logger.info("\n--- 验证ConsecutiveCloseAboveOpenCondition逻辑 ---")
         
-        # 测试修复前的逻辑（平均角度）
-        params_avg = {
-            'ma_period': 5,
-            'consecutive_days': 3,
-            'threshold': 0.0,
-            'return_type': 'average'  # 返回平均角度
-        }
-        condition_avg = MA5AngleConsecutiveCondition(parameters=params_avg)
-        result_avg = condition_avg.calculate(stock_data)
-        logger.info(f"平均角度模式结果: {result_avg:.2f}度")
+        # 测试连续收盘价高于开盘价条件
+        params = {'consecutive_days': 3}
+        condition = ConsecutiveCloseAboveOpenCondition(parameters=params)
+        result = condition.calculate(stock_data)
+        logger.info(f"连续3天收盘价高于开盘价: {result} ({'满足' if result else '不满足'})")
         
-        # 测试修复后的逻辑（布尔判断）
-        params_bool = {
-            'ma_period': 5,
-            'consecutive_days': 3,
-            'threshold': 0.0,
-            'return_type': 'boolean'  # 返回布尔值（0/1）
-        }
-        condition_bool = MA5AngleConsecutiveCondition(parameters=params_bool)
-        result_bool = condition_bool.calculate(stock_data)
-        logger.info(f"布尔判断模式结果: {result_bool} (0=不满足, 1=满足)")
-        
-        # 验证不同阈值的影响
-        logger.info("\n--- 验证不同阈值的影响 ---")
-        
-        thresholds = [0.0, 0.5, 1.0, 2.0]
-        for threshold in thresholds:
-            params = {
-                'ma_period': 5,
-                'consecutive_days': 3,
-                'threshold': threshold,
-                'return_type': 'boolean'
-            }
-            condition = MA5AngleConsecutiveCondition(parameters=params)
-            result = condition.calculate(stock_data)
-            logger.info(f"阈值{threshold}度: {result} ({'满足' if result else '不满足'})")
-        
-        # 验证连续天数的影响
-        logger.info("\n--- 验证连续天数的影响 ---")
+        # 验证不同连续天数的影响
+        logger.info("\n--- 验证不同连续天数的影响 ---")
         
         consecutive_days_list = [1, 2, 3, 4, 5]
         for days in consecutive_days_list:
-            params = {
-                'ma_period': 5,
-                'consecutive_days': days,
-                'threshold': 0.0,
-                'return_type': 'boolean'
-            }
-            condition = MA5AngleConsecutiveCondition(parameters=params)
+            params = {'consecutive_days': days}
+            condition = ConsecutiveCloseAboveOpenCondition(parameters=params)
             result = condition.calculate(stock_data)
             logger.info(f"连续{days}天: {result} ({'满足' if result else '不满足'})")
         
