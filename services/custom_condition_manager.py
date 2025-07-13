@@ -209,8 +209,6 @@ class IsSTStockCondition(CustomConditionBase):
             # ST股票名称包含ST、*ST等标识
             st_keywords = ['ST', '*ST', 'S*ST', 'SST']
             result = 1 if any(keyword in stock_name.upper() for keyword in st_keywords) else 0
-            
-            logger.info(f"股票 {stock_code}({stock_name}) ST判断结果: {result}")
             return result
             
         except Exception as e:
@@ -388,7 +386,6 @@ class IsBreakBoardCondition(CustomConditionBase):
             )
             
             result = self._convert_value_type(1 if is_break_board else 0)
-            logger.info(f"IsBreakBoardCondition判断结果, stock_code:{stock_code}, {result}")
             return result
             
         except Exception as e:

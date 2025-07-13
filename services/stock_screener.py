@@ -679,7 +679,6 @@ class StockScreener:
             
             # 第二步：批量计算所有技术指标
             indicator_matrices = self._calculate_indicators_vectorized(stock_matrices, conditions)
-            logger.info(f"指标矩阵: {indicator_matrices}")
             
             # 第三步：批量评估所有条件
             condition_results = self._evaluate_conditions_vectorized(stock_matrices, indicator_matrices, conditions)
@@ -781,8 +780,6 @@ class StockScreener:
                         indicator_results[indicator][stock_code] = atr_value.iloc[-1] if not atr_value.empty else None
                         
                     else:
-                        logger.info(f"其他指标: {indicator}")
-
                         # 其他指标使用原有方法
                         stock_data = pd.DataFrame({
                             'close_price': close_prices,
