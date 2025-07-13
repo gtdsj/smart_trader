@@ -23,12 +23,12 @@ from core.task_manager import TaskManager
 from core.task_functions import get_task_functions
 from services.scheduler_service import SchedulerService
 from core.database import get_db, ScheduledTask, TaskExecutionHistory, init_database
-from utils.logger import get_logger
+from utils.log_config import get_logger
 
 # 初始化数据库
 init_database()
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 class TestTaskManager:
     """任务管理器测试类"""

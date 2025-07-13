@@ -12,10 +12,10 @@ from services.optimized_backfill_service import OptimizedBackfillService
 from services.data_service import DataService
 from api.dependencies import get_data_service, get_optimized_backfill_service
 from configs.optimized_backfill_config import OptimizedBackfillConfig
-from utils.logger import get_logger
+from utils.log_config import get_logger
 from models.api_response import ApiResponse
 
-logger = get_logger(__name__)
+logger = get_logger()
 router = APIRouter(prefix="/api/v1/unified-backfill", tags=["统一数据补全"])
 
 # 全局任务管理

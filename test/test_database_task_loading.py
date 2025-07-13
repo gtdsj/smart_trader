@@ -16,9 +16,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.database import init_database, get_db, ScheduledTask
 from services.scheduler_service import SchedulerService
-from utils.logger import get_logger
+from utils.log_config import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 async def test_database_task_loading():
     """测试从数据库加载任务"""

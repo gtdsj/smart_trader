@@ -16,9 +16,9 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.stock_info_updater import StockInfoUpdater
-from utils.logger import get_logger
+from utils.log_config import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 def test_singleton_pattern():
     """测试单例模式"""

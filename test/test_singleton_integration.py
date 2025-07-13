@@ -18,9 +18,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.stock_info_updater import StockInfoUpdater, stock_info_updater
 from services.startup_service import StartupService
 from core.task_functions import TaskFunctions
-from utils.logger import get_logger
+from utils.log_config import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 @pytest.mark.asyncio
 async def test_cross_service_singleton():

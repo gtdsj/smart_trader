@@ -7,9 +7,11 @@ import uvicorn
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from loguru import logger
-
 from config import get_settings, SystemConfig
+from utils.log_config import setup_logging, get_logger
+
+# 获取logger实例
+logger = get_logger()
 from core.database import init_database
 from core.cache_adapter import init_cache
 from api.unified_backfill_routes import router as unified_backfill_router
@@ -235,18 +237,8 @@ if __name__ == "__main__":
     
     settings = get_settings()
     
-    # 确保日志目录存在
-    log_dir = Path(settings.log_dir)
-    log_dir.mkdir(parents=True, exist_ok=True)
-    
-    # 配置日志
-    logger.add(
-        log_dir / f"{settings.log_file_prefix}_{{time:YYYY-MM-DD}}.log",
-        rotation="1 day",
-        retention=f"{settings.max_log_files} days",
-        level=settings.log_level,
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} | {message}"
-    )
+    # 设置统一日志配置
+    setup_logging()
     
     try:
         logger.info("启动量化交易系统...")

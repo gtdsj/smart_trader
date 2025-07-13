@@ -17,9 +17,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.custom_condition_manager import IsBreakBoardCondition
 from services.stock_info_cache_service import StockInfoCacheService
-from utils.logger import get_logger
+from utils.log_config import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 def create_test_stock_data(prev_close: float, current_high: float, current_close: float) -> pd.DataFrame:
     """创建测试用的股票数据"""

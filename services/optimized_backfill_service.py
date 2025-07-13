@@ -18,10 +18,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from core.database import get_duckdb_connection
 from services.xtquant_service import XtQuantService
 from configs.optimized_backfill_config import OptimizedBackfillConfig
-from utils.logger import get_logger
+from utils.log_config import get_logger
 from services.xtquant_service import Period
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 class OptimizedBackfillService:
