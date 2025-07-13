@@ -207,6 +207,50 @@ def create_tables_manually(engine):
             """))
             conn.commit()
             
+            # 创建股票基础信息表（A股专用简化版）
+            conn.execute(text("""
+                CREATE SEQUENCE IF NOT EXISTS stock_basic_info_id_seq
+            """))
+            conn.commit()
+            
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS stock_basic_info (
+                    id INTEGER PRIMARY KEY DEFAULT nextval('stock_basic_info_id_seq'),
+                    stock_code VARCHAR(20) NOT NULL UNIQUE,
+                    stock_name VARCHAR(100) NOT NULL,
+                    exchange VARCHAR(10) NOT NULL,
+                    listing_date VARCHAR(20),
+                    is_st BOOLEAN DEFAULT FALSE,
+                    is_trading BOOLEAN DEFAULT TRUE,
+                    price_tick DOUBLE DEFAULT 0.01,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+            
+            # 创建股票基础信息表索引
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_stock_basic_code ON stock_basic_info(stock_code)
+            """))
+            
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_stock_basic_name ON stock_basic_info(stock_name)
+            """))
+            
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_stock_basic_exchange ON stock_basic_info(exchange)
+            """))
+            
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_stock_basic_is_st ON stock_basic_info(is_st)
+            """))
+            
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_stock_basic_is_trading ON stock_basic_info(is_trading)
+            """))
+            conn.commit()
+            
             # 创建日线股票数据表（用于数据服务）
             conn.execute(text("""
                 CREATE SEQUENCE IF NOT EXISTS daily_stock_data_id_seq
@@ -245,6 +289,89 @@ def create_tables_manually(engine):
             
             conn.execute(text("""
                 CREATE INDEX IF NOT EXISTS idx_daily_code_date ON daily_stock_data(stock_code, trade_date)
+            """))
+            conn.commit()
+            
+            # 创建定时任务表
+            conn.execute(text("""
+                CREATE SEQUENCE IF NOT EXISTS scheduled_tasks_id_seq
+            """))
+            conn.commit()
+            
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                    id INTEGER PRIMARY KEY DEFAULT nextval('scheduled_tasks_id_seq'),
+                    task_id VARCHAR(100) NOT NULL UNIQUE,
+                    name VARCHAR(200) NOT NULL,
+                    description TEXT,
+                    task_type VARCHAR(50) NOT NULL,
+                    cron_expression VARCHAR(100) NOT NULL,
+                    task_function VARCHAR(200) NOT NULL,
+                    task_params TEXT,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    last_run_time TIMESTAMP,
+                    next_run_time TIMESTAMP,
+                    status VARCHAR(20) DEFAULT 'PENDING',
+                    error_message TEXT,
+                    run_count INTEGER DEFAULT 0,
+                    success_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+            
+            # 创建定时任务表索引
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_task_id ON scheduled_tasks(task_id)
+            """))
+            
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_type ON scheduled_tasks(task_type)
+            """))
+            
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_active ON scheduled_tasks(is_active)
+            """))
+            
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_time)
+            """))
+            conn.commit()
+            
+            # 创建任务执行历史表
+            conn.execute(text("""
+                CREATE SEQUENCE IF NOT EXISTS task_execution_history_id_seq
+            """))
+            conn.commit()
+            
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS task_execution_history (
+                    id INTEGER PRIMARY KEY DEFAULT nextval('task_execution_history_id_seq'),
+                    task_id VARCHAR(100) NOT NULL,
+                    execution_date DATE NOT NULL,
+                    start_time TIMESTAMP NOT NULL,
+                    end_time TIMESTAMP,
+                    status VARCHAR(20) NOT NULL,
+                    result_data TEXT,
+                    error_message TEXT,
+                    execution_duration DOUBLE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+            
+            # 创建任务执行历史表索引
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_task_history_task_id ON task_execution_history(task_id)
+            """))
+            
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_task_history_date ON task_execution_history(execution_date)
+            """))
+            
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS idx_task_history_status ON task_execution_history(status)
             """))
             conn.commit()
             
@@ -432,6 +559,61 @@ class NotificationLog(Base):
     level = Column(String(20), default='INFO')
     is_sent = Column(Boolean, default=False)
     sent_at = Column(DateTime)
+    created_at = Column(DateTime, default=func.now())
+
+
+class StockBasicInfo(Base):
+    """股票基础信息表 - 专为A股设计的简化版本"""
+    __tablename__ = "stock_basic_info"
+    
+    id = Column(Integer, primary_key=True, comment="主键ID")
+    stock_code = Column(String(20), nullable=False, unique=True, index=True, comment="股票代码，如000001.SZ")
+    stock_name = Column(String(100), nullable=False, comment="股票名称，如平安银行")
+    exchange = Column(String(10), nullable=False, comment="交易所，SZ/SH")
+    listing_date = Column(String(20), comment="上市日期，YYYY-MM-DD格式")
+    is_st = Column(Boolean, default=False, comment="是否为ST股票")
+    is_trading = Column(Boolean, default=True, comment="是否可交易")
+    price_tick = Column(Float, default=0.01, comment="最小价格变动单位，A股通常为0.01")
+    created_at = Column(DateTime, default=func.now(), comment="记录创建时间")
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="记录更新时间")
+
+
+class ScheduledTask(Base):
+    """定时任务表"""
+    __tablename__ = "scheduled_tasks"
+    
+    id = Column(Integer, primary_key=True)
+    task_id = Column(String(100), nullable=False, unique=True, index=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text)
+    task_type = Column(String(50), nullable=False, index=True)
+    cron_expression = Column(String(100), nullable=False)
+    task_function = Column(String(200), nullable=False)
+    task_params = Column(Text)
+    is_active = Column(Boolean, default=True, index=True)
+    last_run_time = Column(DateTime)
+    next_run_time = Column(DateTime, index=True)
+    status = Column(String(20), default='PENDING')
+    error_message = Column(Text)
+    run_count = Column(Integer, default=0)
+    success_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class TaskExecutionHistory(Base):
+    """任务执行历史表"""
+    __tablename__ = "task_execution_history"
+    
+    id = Column(Integer, primary_key=True)
+    task_id = Column(String(100), nullable=False, index=True)
+    execution_date = Column(DateTime, nullable=False, index=True)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime)
+    status = Column(String(20), nullable=False, index=True)
+    result_data = Column(Text)
+    error_message = Column(Text)
+    execution_duration = Column(Float)
     created_at = Column(DateTime, default=func.now())
 
 

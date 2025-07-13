@@ -31,7 +31,11 @@ except ImportError:
 from config import get_settings
 from core.cache_adapter import get_cache_client
 from services.notification_service import NotificationService
-
+from core.database import get_db, StockBasicInfo, init_database
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+import traceback
+from services.stock_info_cache_service import get_stock_cache_service
 
 class Period(Enum):
     """K线周期枚举"""
@@ -1134,6 +1138,195 @@ class XtQuantService:
             self.order_callbacks.remove(callback)
     
     def unregister_trade_callback(self, callback: Callable):
-        """取消注册成交回调"""
+        """注销成交回调"""
         if callback in self.trade_callbacks:
             self.trade_callbacks.remove(callback)
+    
+    async def get_stock_basic_info(self, stock_code: str, force_update: bool = False) -> Optional[Dict[str, Any]]:
+        """获取股票基础信息
+        
+        Args:
+            stock_code: 股票代码
+            force_update: 是否强制更新数据库中的信息
+            
+        Returns:
+            股票基础信息字典，包含股票名称等信息
+        """
+        try:
+            # 首先尝试从数据库获取
+            if not force_update:
+                db_info = await self._get_stock_basic_info_from_db(stock_code)
+                if db_info:
+                    logger.info(f"从数据库获取股票基础信息: {stock_code}")
+                    return db_info
+            
+            # 从xtquant获取最新信息
+            if xtdata is None:
+                logger.warning("xtdata模块未安装，无法获取股票基础信息")
+                return None
+            
+            logger.info(f"从xtquant获取股票基础信息: {stock_code}")
+            instrument_detail = await asyncio.get_event_loop().run_in_executor(
+                self.executor, xtdata.get_instrument_detail, stock_code
+            )
+            
+            if not instrument_detail:
+                logger.warning(f"未找到股票基础信息: {stock_code}")
+                return None
+            
+            # 保存到数据库
+            await self._save_stock_basic_info_to_db(stock_code, instrument_detail)
+            
+            # 转换为A股专用格式返回
+            stock_name = instrument_detail.get('InstrumentName', '')
+            exchange = 'SZ' if '.SZ' in stock_code else 'SH' if '.SH' in stock_code else ''
+            
+            # 判断是否为ST股票
+            is_st = any(keyword in stock_name.upper() for keyword in ['ST', '*ST', 'S*ST', 'SST'])
+            
+            return {
+                'stock_code': stock_code,
+                'stock_name': stock_name,
+                'exchange': exchange,
+                'listing_date': instrument_detail.get('OpenDate', ''),
+                'is_st': is_st,
+                'is_trading': instrument_detail.get('IsTrading', True),
+                'price_tick': instrument_detail.get('PriceTick', 0.01)
+            }
+            
+        except Exception as e:
+            logger.error(f"获取股票基础信息失败: {stock_code}, 错误: {e}")
+            logger.error(f"错误堆栈: {traceback.format_exc()}")
+            return None
+    
+    async def _get_stock_basic_info_from_db(self, stock_code: str) -> Optional[Dict[str, Any]]:
+        """从数据库获取股票基础信息"""
+        try:
+            # 确保数据库已初始化
+            init_database()
+            
+            def get_info(db: Session):
+                return db.query(StockBasicInfo).filter(StockBasicInfo.stock_code == stock_code).first()
+            
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
+                stock_info = get_info(db)
+                if stock_info:
+                    return {
+                        'stock_code': stock_info.stock_code,
+                        'stock_name': stock_info.stock_name or '',
+                        'exchange': stock_info.exchange or '',
+                        'listing_date': stock_info.listing_date or '',
+                        'is_st': stock_info.is_st or False,
+                        'is_trading': stock_info.is_trading or True,
+                        'price_tick': stock_info.price_tick or 0.01
+                    }
+                return None
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"从数据库获取股票基础信息失败: {stock_code}, 错误: {e}")
+            logger.error(f"错误堆栈: {traceback.format_exc()}")
+            return None
+    
+    async def _save_stock_basic_info_to_db(self, stock_code: str, instrument_detail: Dict[str, Any]):
+        """保存股票基础信息到数据库"""
+        try:
+            # 确保数据库已初始化
+            init_database()
+            
+            def save_info(db: Session):
+                # 查找现有记录
+                existing = db.query(StockBasicInfo).filter(StockBasicInfo.stock_code == stock_code).first()
+                
+                # 提取A股相关信息
+                stock_name = instrument_detail.get('InstrumentName', '')
+                exchange = 'SZ' if '.SZ' in stock_code else 'SH' if '.SH' in stock_code else ''
+                is_st = any(keyword in stock_name.upper() for keyword in ['ST', '*ST', 'S*ST', 'SST'])
+                
+                if existing:
+                    # 更新现有记录
+                    existing.stock_name = stock_name
+                    existing.exchange = exchange
+                    existing.listing_date = instrument_detail.get('OpenDate', '')
+                    existing.is_st = is_st
+                    existing.is_trading = instrument_detail.get('IsTrading', True)
+                    existing.price_tick = instrument_detail.get('PriceTick', 0.01)
+                    existing.updated_at = func.now()
+                else:
+                    # 创建新记录
+                    new_info = StockBasicInfo(
+                        stock_code=stock_code,
+                        stock_name=stock_name,
+                        exchange=exchange,
+                        listing_date=instrument_detail.get('OpenDate', ''),
+                        is_st=is_st,
+                        is_trading=instrument_detail.get('IsTrading', True),
+                        price_tick=instrument_detail.get('PriceTick', 0.01)
+                    )
+                    db.add(new_info)
+                
+                db.commit()
+                logger.info(f"股票基础信息已保存到数据库: {stock_code}")
+                
+                # 同步更新内存缓存
+                try:
+                    cache_service = get_stock_cache_service()
+                    
+                    stock_info = {
+                        'stock_code': stock_code,
+                        'stock_name': stock_name,
+                        'exchange': exchange,
+                        'listing_date': instrument_detail.get('OpenDate', ''),
+                        'is_st': is_st,
+                        'is_trading': instrument_detail.get('IsTrading', True),
+                        'price_tick': instrument_detail.get('PriceTick', 0.01),
+                        'updated_at': datetime.now()
+                    }
+                    
+                    cache_service.update_stock_info(stock_code, stock_info)
+                    logger.debug(f"已同步更新股票缓存: {stock_code}")
+                    
+                except Exception as cache_error:
+                    logger.warning(f"更新股票缓存失败: {stock_code}, 错误: {cache_error}")
+            
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
+                save_info(db)
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"保存股票基础信息到数据库失败: {stock_code}, 错误: {e}")
+            logger.error(f"错误堆栈: {traceback.format_exc()}")
+    
+    async def batch_update_stock_basic_info(self, stock_codes: List[str]) -> Dict[str, bool]:
+        """批量更新股票基础信息
+        
+        Args:
+            stock_codes: 股票代码列表
+            
+        Returns:
+            更新结果字典，key为股票代码，value为是否成功
+        """
+        results = {}
+        
+        for stock_code in stock_codes:
+            try:
+                info = await self.get_stock_basic_info(stock_code, force_update=True)
+                results[stock_code] = info is not None
+                
+                # 添加延迟避免请求过于频繁
+                await asyncio.sleep(0.1)
+                
+            except Exception as e:
+                logger.error(f"批量更新股票基础信息失败: {stock_code}, 错误: {e}")
+                results[stock_code] = False
+        
+        success_count = sum(1 for success in results.values() if success)
+        logger.info(f"批量更新股票基础信息完成: 成功 {success_count}/{len(stock_codes)}")
+        
+        return results

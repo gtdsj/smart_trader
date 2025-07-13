@@ -274,3 +274,37 @@ class TimeUtils:
             str: XtQuant格式的日期字符串
         """
         return TimeUtils.convert_date_format(date_str, to_format='%Y%m%d')
+    
+    @staticmethod
+    def is_trading_day(dt: Any = None) -> bool:
+        """
+        判断是否为交易日
+        
+        Args:
+            dt: 时间对象，如果为None则使用当前时间
+            
+        Returns:
+            bool: 是否为交易日
+        """
+        try:
+            if dt is None:
+                dt = datetime.now()
+            
+            normalized_dt = TimeUtils.normalize_timestamp(dt)
+            if pd.isna(normalized_dt):
+                return False
+            
+            # 获取星期几 (0=Monday, 6=Sunday)
+            weekday = normalized_dt.weekday()
+            
+            # 周末不是交易日
+            if weekday >= 5:  # Saturday=5, Sunday=6
+                return False
+            
+            # 简化版本：工作日都认为是交易日
+            # 实际应该考虑节假日，但这需要节假日数据
+            return True
+            
+        except Exception as e:
+            logger.warning(f"判断交易日失败: {dt}, 错误: {e}")
+            return False

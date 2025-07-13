@@ -13,18 +13,10 @@ from config import get_settings, SystemConfig
 from core.database import init_database
 from core.cache_adapter import init_cache
 from api.unified_backfill_routes import router as unified_backfill_router
-from api.trading_routes import router as trading_router, set_trading_service
-from api.strategy_manager_routes import (
-    router as strategy_manager_router,
-    set_strategy_manager,
-    set_strategy_executor
-)
-from api.strategy_routes import router as strategy_router, set_strategy_service
-from api.backtest_routes import router as backtest_router, set_backtest_service
-from api.notification_routes import router as notification_router, set_notification_service
 from api.config_routes import router as config_router
 from api.scheduler_routes import router as scheduler_router
 from api.stock_screener_routes import router as stock_screener_router
+from api.routes import router as main_api_router
 from services.notification_service import NotificationService
 from services.data_service import DataService
 from services.trading_service import TradingService
@@ -34,6 +26,7 @@ from services.xtquant_service import XtQuantService
 from services.strategy_manager import StrategyManager
 from services.strategy_executor import StrategyExecutor
 from services.scheduler_service import SchedulerService
+from services.stock_info_cache_service import StockInfoCacheService
 
 
 @asynccontextmanager
@@ -90,9 +83,15 @@ async def lifespan(app: FastAPI):
         
         # 初始化调度器服务
         logger.info("开始初始化调度器服务...")
-        scheduler_service = SchedulerService(data_service, notification_service)
+        scheduler_service = SchedulerService()
         await scheduler_service.start()
         logger.info("调度器服务初始化完成")
+        
+        # 初始化股票信息缓存服务
+        logger.info("开始初始化股票信息缓存服务...")
+        stock_cache_service = StockInfoCacheService()
+        await stock_cache_service.initialize()
+        logger.info("股票信息缓存服务初始化完成")
         
         # 设置服务依赖
         strategy_executor.set_data_service(data_service)
@@ -102,13 +101,7 @@ async def lifespan(app: FastAPI):
         backtest_service.set_data_service(data_service)
         backtest_service.set_strategy_service(strategy_service)
         
-        # 设置API路由的服务实例
-        set_trading_service(trading_service)
-        set_strategy_service(strategy_service)
-        set_backtest_service(backtest_service)
-        set_notification_service(notification_service)
-        set_strategy_manager(strategy_manager)
-        set_strategy_executor(strategy_executor)
+        # 服务实例已通过新的API路由系统自动管理
         
         # 保存服务实例到app.state以便在关闭时使用
         app.state.scheduler_service = scheduler_service
@@ -118,6 +111,7 @@ async def lifespan(app: FastAPI):
         app.state.trading_service = trading_service
         app.state.notification_service = notification_service
         app.state.xtquant_service = xtquant_service
+        app.state.stock_cache_service = stock_cache_service
         
         logger.info("所有服务启动完成")
         
@@ -204,12 +198,11 @@ def create_app() -> FastAPI:
     )
     
     # 注册路由
+    # 注册新的统一API路由系统
+    app.include_router(main_api_router, prefix="/api")
+    
+    # 保留必要的独立路由
     app.include_router(unified_backfill_router)
-    app.include_router(trading_router)
-    app.include_router(strategy_manager_router)
-    app.include_router(strategy_router)
-    app.include_router(backtest_router)
-    app.include_router(notification_router)
     app.include_router(config_router)
     app.include_router(scheduler_router)
     app.include_router(stock_screener_router)

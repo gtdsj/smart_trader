@@ -21,6 +21,7 @@ from services.strategy_expression_parser import StrategyExpressionParser
 from services.indicator_manager import IndicatorManager
 from services.operator_manager import OperatorManager
 from services.custom_condition_manager import get_custom_condition_manager
+from services.stock_info_cache_service import StockInfoCacheService
 
 
 class StockScreener:
@@ -34,6 +35,7 @@ class StockScreener:
         self.indicator_manager = IndicatorManager()
         self.operator_manager = OperatorManager()
         self.custom_condition_manager = get_custom_condition_manager()
+        self.stock_cache_service = StockInfoCacheService()
         
         # 设置数据服务
         self.strategy_manager.set_data_service(self.data_service)
@@ -514,9 +516,14 @@ class StockScreener:
             
             if final_result:
                 current_price = stock_data['close'].iloc[-1] if 'close' in stock_data.columns else 0
+                # 获取股票名称
+                stock_info = self.stock_cache_service.get_stock_info(symbol)
+                stock_name = stock_info.get('stock_name', symbol) if stock_info else symbol
+                
                 return {
                     "matched": True,
                     "symbol": symbol,
+                    "name": stock_name,
                     "price": float(current_price),
                     "reason": "符合策略条件",
                     "indicators": {k: float(v) if isinstance(v, (int, float, np.number)) else str(v) 
@@ -562,9 +569,14 @@ class StockScreener:
             
             if evaluation_result["result"]:
                 current_price = stock_data['close'].iloc[-1] if 'close' in stock_data.columns else 0
+                # 获取股票名称
+                stock_info = self.stock_cache_service.get_stock_info(symbol)
+                stock_name = stock_info.get('stock_name', symbol) if stock_info else symbol
+                
                 return {
                     "matched": True,
                     "symbol": symbol,
+                    "name": stock_name,
                     "price": float(current_price),
                     "reason": "符合表达式条件",
                     "indicators": {k: float(v) if isinstance(v, (int, float, np.number)) else str(v) 
@@ -778,6 +790,7 @@ class StockScreener:
                             'low_price': low_prices,
                             'volume': volumes
                         })
+                        stock_data.attrs = {'stock_code': stock_code}
                         result_df = self.indicator_manager.calculate_indicator(indicator, stock_data)
                         
                         # 提取指标值
@@ -881,6 +894,10 @@ class StockScreener:
                 if final_result:
                     current_price = stock_matrices['close_prices'][stock_code].iloc[-1]
                     
+                    # 获取股票名称
+                    stock_info = self.stock_cache_service.get_stock_info(stock_code)
+                    stock_name = stock_info.get('stock_name', '') if stock_info else ''
+                    
                     # 收集指标值
                     indicators = {}
                     for indicator, stock_values in indicator_matrices.items():
@@ -890,6 +907,7 @@ class StockScreener:
                     matched_stocks.append({
                         "matched": True,
                         "symbol": stock_code,
+                        "name": stock_name,
                         "price": float(current_price),
                         "reason": "符合策略条件",
                         "indicators": {k: float(v) if isinstance(v, (int, float, np.number)) and not pd.isna(v) else str(v) 
@@ -927,9 +945,15 @@ class StockScreener:
                 
                 if final_result:
                     current_price = stock_data['close_price'].iloc[-1] if 'close_price' in stock_data.columns else 0
+                    
+                    # 获取股票名称
+                    stock_info = self.stock_cache_service.get_stock_info(stock_code)
+                    stock_name = stock_info.get('stock_name', '') if stock_info else ''
+                    
                     matched_stocks.append({
                         "matched": True,
                         "symbol": stock_code,
+                        "name": stock_name,
                         "price": float(current_price),
                         "reason": "符合策略条件",
                         "indicators": {k: float(v) if isinstance(v, (int, float, np.number)) else str(v) 

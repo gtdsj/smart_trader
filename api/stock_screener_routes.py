@@ -44,6 +44,7 @@ class ScreenByExpressionRequest(BaseModel):
 class MatchedStock(BaseModel):
     """匹配的股票模型"""
     symbol: str = Field(..., description="股票代码")
+    name: str = Field(..., description="股票名称")
     price: float = Field(..., description="当前价格")
     reason: str = Field(..., description="匹配原因")
     indicators: Optional[Dict[str, Any]] = Field(None, description="相关指标值")
@@ -106,6 +107,7 @@ async def screen_stocks_by_strategy(
         for stock in result["matched_stocks"]:
             matched_stocks.append(MatchedStock(
                 symbol=stock["symbol"],
+                name=stock.get("name", ""),
                 price=stock.get("price", 0.0),
                 reason=stock.get("reason", ""),
                 indicators=stock.get("indicators", {})
@@ -150,6 +152,7 @@ async def screen_stocks_by_expression(
         for stock in result["matched_stocks"]:
             matched_stocks.append(MatchedStock(
                 symbol=stock["symbol"],
+                name=stock.get("name", ""),
                 price=stock.get("price", 0.0),
                 reason=stock.get("reason", ""),
                 indicators=stock.get("indicators", {})
@@ -237,6 +240,7 @@ async def get_screening_result(
         for stock in data["matched_stocks"]:
             matched_stocks.append(MatchedStock(
                 symbol=stock["symbol"],
+                name=stock.get("name", ""),
                 price=stock.get("price", 0.0),
                 reason=stock.get("reason", ""),
                 indicators=stock.get("indicators", {})

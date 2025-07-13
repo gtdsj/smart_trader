@@ -1,21 +1,28 @@
-# coding=utf-8
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-定时任务调度服务
-用于管理和执行定时任务，包括选股任务、数据更新等
+调度服务模块
+负责管理和执行定时任务
+基于数据库的任务调度系统
 """
 
 import asyncio
-from datetime import datetime, time
-from typing import Dict, List, Optional, Callable, Any
-from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any, Callable
 from enum import Enum
-import json
-from croniter import croniter
-
+from dataclasses import dataclass, field
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.date import DateTrigger
 from loguru import logger
+
+from core.time_utils import TimeUtils
+from core.task_manager import TaskManager
+from core.task_functions import get_task_functions
 from services.notification_service import NotificationService, NotificationType, NotificationLevel
-from strategies.custom_stock_selection import CustomStockSelectionStrategy
 from services.data_service import DataService
+from strategies.custom_stock_selection import CustomStockSelectionStrategy
 
 
 class TaskStatus(Enum):
@@ -68,344 +75,363 @@ class ScheduledTask:
 
 
 class SchedulerService:
-    """定时任务调度服务"""
+    """调度服务 - 基于数据库的任务调度系统"""
     
-    def __init__(self, data_service: DataService, notification_service: NotificationService):
-        self.data_service = data_service
-        self.notification_service = notification_service
-        self.tasks: Dict[str, ScheduledTask] = {}
-        self.running_tasks: Dict[str, asyncio.Task] = {}
-        self.is_running = False
-        self._scheduler_task: Optional[asyncio.Task] = None
-        
-        # 初始化选股策略
-        self.stock_selection_strategy = CustomStockSelectionStrategy(data_service)
-        
-        # 注册默认任务
-        self._register_default_tasks()
+    def __init__(self):
+        self._scheduler: Optional[AsyncIOScheduler] = None
+        self._task_manager: Optional[TaskManager] = None
+        self._notification_service = NotificationService()
+        self._running = False
+        self._task_check_interval = 60  # 每60秒检查一次待执行任务
         
     async def start(self):
         """启动调度器"""
-        if self.is_running:
-            logger.warning("调度器已在运行中")
+        if self._running:
+            logger.warning("调度服务已经在运行")
             return
             
-        self.is_running = True
-        self._scheduler_task = asyncio.create_task(self._scheduler_loop())
-        logger.info("定时任务调度器已启动")
+        logger.info("启动基于数据库的调度服务")
+        
+        try:
+            # 初始化任务管理器
+            self._task_manager = TaskManager()
+            
+            # 注册任务执行函数
+            task_functions = get_task_functions()
+            for func_name, func in task_functions.items():
+                self._task_manager.register_task_function(func_name, func)
+                
+            # 从数据库加载并注册任务
+            self._load_tasks_from_database()
+            
+            # 初始化调度器
+            self._scheduler = AsyncIOScheduler()
+            
+            # 添加定期检查任务的作业
+            self._scheduler.add_job(
+                self._check_and_execute_tasks,
+                trigger=IntervalTrigger(seconds=self._task_check_interval),
+                id='task_checker',
+                name='定期检查并执行任务',
+                max_instances=1
+            )
+            
+            # 启动调度器
+            self._scheduler.start()
+            self._running = True
+            
+            logger.info("调度服务启动完成")
+            
+            # 立即执行一次任务检查
+            await self._check_and_execute_tasks()
+            
+        except Exception as e:
+            logger.error(f"调度服务启动失败: {e}")
+            raise
         
     async def stop(self):
         """停止调度器"""
-        if not self.is_running:
+        if not self._running:
             return
             
-        self.is_running = False
+        logger.info("停止调度服务")
+        self._running = False
         
-        # 取消调度器任务
-        if self._scheduler_task:
-            self._scheduler_task.cancel()
-            try:
-                await self._scheduler_task
-            except asyncio.CancelledError:
-                pass
-                
-        # 取消所有运行中的任务
-        for task_id, task in self.running_tasks.items():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-                
-        self.running_tasks.clear()
-        logger.info("定时任务调度器已停止")
-        
-    def add_task(self, task: ScheduledTask) -> bool:
-        """
-        添加定时任务
-        
-        Args:
-            task: 任务配置
-            
-        Returns:
-            是否添加成功
-        """
         try:
-            # 验证cron表达式
-            croniter(task.cron_expression)
-            
-            self.tasks[task.task_id] = task
-            logger.info(f"添加定时任务: {task.name} ({task.task_id})")
-            return True
+            if self._scheduler:
+                self._scheduler.shutdown(wait=True)
+                
+            logger.info("调度服务已停止")
             
         except Exception as e:
-            logger.error(f"添加定时任务失败: {e}")
-            return False
-            
-    def remove_task(self, task_id: str) -> bool:
-        """
-        移除定时任务
+            logger.error(f"停止调度服务时出错: {e}")
         
-        Args:
-            task_id: 任务ID
-            
-        Returns:
-            是否移除成功
-        """
+    def is_running(self) -> bool:
+        """检查调度服务是否正在运行"""
+        return self._running
+        
+    def _load_tasks_from_database(self):
+        """从数据库加载任务并验证任务函数"""
         try:
-            if task_id in self.tasks:
-                # 如果任务正在运行，先取消
-                if task_id in self.running_tasks:
-                    self.running_tasks[task_id].cancel()
-                    del self.running_tasks[task_id]
+            from core.database import get_db, ScheduledTask
+            
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
+                # 获取所有活跃任务
+                tasks = db.query(ScheduledTask).filter(
+                    ScheduledTask.is_active == True
+                ).all()
+                
+                logger.info(f"从数据库加载了 {len(tasks)} 个活跃任务")
+                
+                # 验证每个任务的函数是否已注册
+                missing_functions = []
+                for task in tasks:
+                    if not self._task_manager or task.task_function not in self._task_manager._task_functions:
+                        missing_functions.append(task.task_function)
+                        logger.warning(f"任务 {task.name} 的函数 {task.task_function} 未注册")
+                    else:
+                        logger.info(f"任务 {task.name} 已加载，函数: {task.task_function}")
+                
+                if missing_functions:
+                    logger.error(f"以下任务函数未注册: {missing_functions}")
                     
-                del self.tasks[task_id]
-                logger.info(f"移除定时任务: {task_id}")
-                return True
-            else:
-                logger.warning(f"任务{task_id}不存在")
-                return False
+            finally:
+                db.close()
                 
         except Exception as e:
-            logger.error(f"移除定时任务失败: {e}")
-            return False
+            logger.error(f"从数据库加载任务失败: {e}")
+            # 如果数据库中没有任务，创建默认任务
+            logger.info("尝试创建默认任务...")
+            if self._task_manager:
+                self._task_manager.create_default_tasks()
+
+
+        
+    async def _check_and_execute_tasks(self):
+        """检查并执行待执行的任务"""
+        if not self._task_manager:
+            return
             
-    def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
-        """
-        获取任务状态
-        
-        Args:
-            task_id: 任务ID
-            
-        Returns:
-            任务状态信息
-        """
-        if task_id not in self.tasks:
-            return None
-            
-        task = self.tasks[task_id]
-        return {
-            'task_id': task.task_id,
-            'name': task.name,
-            'description': task.description,
-            'task_type': task.task_type.value,
-            'cron_expression': task.cron_expression,
-            'is_active': task.is_active,
-            'status': task.status.value,
-            'last_run_time': task.last_run_time.isoformat() if task.last_run_time else None,
-            'next_run_time': task.next_run_time.isoformat() if task.next_run_time else None,
-            'error_message': task.error_message,
-            'created_time': task.created_time.isoformat(),
-            'is_running': task_id in self.running_tasks
-        }
-        
-    def list_tasks(self) -> List[Dict[str, Any]]:
-        """
-        获取所有任务列表
-        
-        Returns:
-            任务列表
-        """
-        return [self.get_task_status(task_id) for task_id in self.tasks.keys()]
-        
-    async def run_task_now(self, task_id: str) -> bool:
-        """
-        立即执行任务
-        
-        Args:
-            task_id: 任务ID
-            
-        Returns:
-            是否启动成功
-        """
-        if task_id not in self.tasks:
-            logger.error(f"任务{task_id}不存在")
-            return False
-            
-        if task_id in self.running_tasks:
-            logger.warning(f"任务{task_id}正在运行中")
-            return False
-            
-        task = self.tasks[task_id]
-        self.running_tasks[task_id] = asyncio.create_task(
-            self._execute_task(task)
-        )
-        
-        logger.info(f"手动执行任务: {task.name}")
-        return True
-        
-    async def _scheduler_loop(self):
-        """调度器主循环"""
-        logger.info("调度器主循环已启动")
-        
-        while self.is_running:
-            try:
-                current_time = datetime.now()
-                
-                # 检查需要执行的任务
-                for task_id, task in self.tasks.items():
-                    if not task.is_active:
-                        continue
-                        
-                    if task_id in self.running_tasks:
-                        continue
-                        
-                    if task.next_run_time and current_time >= task.next_run_time:
-                        # 执行任务
-                        self.running_tasks[task_id] = asyncio.create_task(
-                            self._execute_task(task)
-                        )
-                        
-                        # 更新下次执行时间
-                        task._update_next_run_time()
-                        
-                # 清理已完成的任务
-                completed_tasks = []
-                for task_id, running_task in self.running_tasks.items():
-                    if running_task.done():
-                        completed_tasks.append(task_id)
-                        
-                for task_id in completed_tasks:
-                    del self.running_tasks[task_id]
-                    
-                # 等待一分钟后再次检查
-                await asyncio.sleep(60)
-                
-            except Exception as e:
-                logger.error(f"调度器循环出错: {e}")
-                await asyncio.sleep(60)
-                
-    async def _execute_task(self, task: ScheduledTask):
-        """
-        执行任务
-        
-        Args:
-            task: 任务配置
-        """
-        task.status = TaskStatus.RUNNING
-        task.last_run_time = datetime.now()
-        task.error_message = None
-        
-        logger.info(f"开始执行任务: {task.name}")
-        
         try:
-            # 执行任务函数
-            result = await task.task_function(**task.task_params)
+            # 获取待执行的任务
+            pending_tasks = self._task_manager.get_pending_tasks()
             
-            task.status = TaskStatus.COMPLETED
-            logger.info(f"任务执行完成: {task.name}")
-            
-            # 发送成功通知
-            if task.task_type == TaskType.STOCK_SELECTION:
-                await self._send_stock_selection_notification(task, result)
+            if not pending_tasks:
+                logger.debug("没有待执行的任务")
+                return
                 
-        except Exception as e:
-            task.status = TaskStatus.FAILED
-            task.error_message = str(e)
-            logger.error(f"任务执行失败: {task.name}, 错误: {e}")
+            logger.info(f"发现 {len(pending_tasks)} 个待执行任务")
             
-            # 发送失败通知
-            await self._send_task_failure_notification(task, e)
-            
-    async def _send_stock_selection_notification(self, task: ScheduledTask, result: List[Dict]):
-        """
-        发送选股结果通知
-        
-        Args:
-            task: 任务配置
-            result: 选股结果
-        """
-        try:
-            if not result:
-                content = "今日未发现符合条件的股票"
-            else:
-                # 构建选股结果消息
-                content_lines = [f"**今日选股结果（共{len(result)}只）**\n"]
+            # 并发执行任务
+            tasks = []
+            for task in pending_tasks:
+                task_coroutine = self._task_manager.execute_task(task)
+                tasks.append(asyncio.create_task(task_coroutine))
                 
-                for i, stock in enumerate(result[:10], 1):  # 只显示前10只
-                    content_lines.append(
-                        f"{i}. **{stock['stock_name']}({stock['stock_code']})**\n"
-                        f"   - 最新价格: {stock['latest_price']:.2f}\n"
-                        f"   - 涨跌幅: {stock['change_pct']:.2f}%\n"
-                        f"   - 评分: {stock['score']:.1f}\n"
-                        f"   - 选股理由: {stock['selection_reason']}\n"
+            # 等待所有任务完成
+            if tasks:
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                # 统计执行结果
+                success_count = sum(1 for result in results if result is True)
+                failed_count = len(results) - success_count
+                
+                logger.info(f"任务执行完成: 成功 {success_count}, 失败 {failed_count}")
+                
+                # 发送执行结果通知
+                if failed_count > 0:
+                    await self._notification_service.send_notification(
+                        title="任务执行结果",
+                        message=f"任务执行完成: 成功 {success_count}, 失败 {failed_count}",
+                        notification_type=NotificationType.TASK_COMPLETION,
+                        level=NotificationLevel.WARNING if failed_count > 0 else NotificationLevel.INFO
                     )
                     
-                if len(result) > 10:
-                    content_lines.append(f"\n... 还有{len(result) - 10}只股票")
-                    
-                content = "\n".join(content_lines)
-                
-            await self.notification_service.send_dingtalk_notification(
-                title=f"📈 {task.name}结果",
-                content=content,
-                notification_type=NotificationType.TRADE_SIGNAL,
-                level=NotificationLevel.INFO
-            )
-            
         except Exception as e:
-            logger.error(f"发送选股通知失败: {e}")
+            logger.error(f"检查和执行任务时出错: {e}")
             
-    async def _send_task_failure_notification(self, task: ScheduledTask, error: Exception):
-        """
-        发送任务失败通知
-        
-        Args:
-            task: 任务配置
-            error: 错误信息
-        """
-        try:
-            content = f"**任务执行失败**\n\n"
-            content += f"**任务名称**: {task.name}\n"
-            content += f"**任务类型**: {task.task_type.value}\n"
-            content += f"**失败时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            content += f"**错误信息**: {str(error)}\n"
-            
-            await self.notification_service.send_dingtalk_notification(
-                title=f"❌ 任务执行失败",
-                content=content,
-                notification_type=NotificationType.SYSTEM_ERROR,
+            # 发送错误通知
+            await self._notification_service.send_notification(
+                title="任务调度错误",
+                message=f"任务调度过程中发生错误: {str(e)}",
+                notification_type=NotificationType.ERROR,
                 level=NotificationLevel.ERROR
             )
+                
+    async def force_execute_task(self, task_id: str) -> bool:
+        """强制执行指定任务"""
+        if not self._task_manager:
+            return False
             
+        try:
+            from core.database import get_db, ScheduledTask
+            
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
+                task = db.query(ScheduledTask).filter(
+                    ScheduledTask.task_id == task_id
+                ).first()
+                
+                if not task:
+                    logger.warning(f"任务不存在: {task_id}")
+                    return False
+                    
+                # 强制执行任务
+                result = await self._task_manager.execute_task(task, force=True)
+                logger.info(f"强制执行任务完成: {task_id}, 结果: {result}")
+                return result
+            finally:
+                db.close()
+                
         except Exception as e:
-            logger.error(f"发送任务失败通知失败: {e}")
+            logger.error(f"强制执行任务失败: {e}")
+            return False
             
-    def _register_default_tasks(self):
-        """
-        注册默认任务
-        """
-        # 每日选股任务（交易日上午9:00执行）
-        stock_selection_task = ScheduledTask(
-            task_id="daily_stock_selection",
-            name="每日选股任务",
-            description="基于多维度条件的每日选股任务",
-            task_type=TaskType.STOCK_SELECTION,
-            cron_expression="0 9 * * 1-5",  # 周一到周五上午9点
-            task_function=self._run_stock_selection,
-            task_params={}
-        )
+    async def add_task(self, task_data: Dict[str, Any]) -> bool:
+        """添加新任务到数据库"""
+        try:
+            from croniter import croniter
+            from core.database import get_db, ScheduledTask
+            
+            # 验证cron表达式
+            try:
+                cron = croniter(task_data['cron_expression'])
+                next_run_time = cron.get_next(datetime)
+            except Exception as e:
+                logger.error(f"无效的cron表达式: {task_data['cron_expression']}, 错误: {e}")
+                return False
+                
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
+                # 检查任务是否已存在
+                existing_task = db.query(ScheduledTask).filter(
+                    ScheduledTask.task_id == task_data['task_id']
+                ).first()
+                
+                if existing_task:
+                    logger.warning(f"任务已存在: {task_data['task_id']}")
+                    return False
+                    
+                # 创建新任务
+                new_task = ScheduledTask(
+                    task_id=task_data['task_id'],
+                    name=task_data['name'],
+                    description=task_data.get('description'),
+                    task_type=task_data['task_type'],
+                    cron_expression=task_data['cron_expression'],
+                    task_function=task_data['task_function'],
+                    task_params=task_data.get('task_params', '{}'),
+                    next_run_time=next_run_time
+                )
+                
+                db.add(new_task)
+                db.commit()
+            except Exception as db_e:
+                db.rollback()
+                logger.error(f"数据库操作失败: {db_e}")
+                return False
+            finally:
+                db.close()
+                
+                logger.info(f"成功添加任务: {task_data['name']}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"添加任务失败: {e}")
+            return False
+            
+    async def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """获取任务状态"""
+        if not self._task_manager:
+            return None
+            
+        return self._task_manager.get_task_status(task_id)
         
-        self.add_task(stock_selection_task)
+    async def get_all_tasks(self) -> List[Dict[str, Any]]:
+        """获取所有任务状态"""
+        if not self._task_manager:
+            return []
+            
+        return self._task_manager.get_all_tasks_status()
         
-        # 盘后选股任务（交易日下午15:30执行）
-        after_market_task = ScheduledTask(
-            task_id="after_market_stock_selection",
-            name="盘后选股任务",
-            description="盘后基于当日数据的选股任务",
-            task_type=TaskType.STOCK_SELECTION,
-            cron_expression="30 15 * * 1-5",  # 周一到周五下午3:30
-            task_function=self._run_stock_selection,
-            task_params={}
-        )
-        
-        self.add_task(after_market_task)
-        
-    async def _run_stock_selection(self) -> List[Dict[str, Any]]:
-        """
-        执行选股任务
-        
-        Returns:
-            选股结果
-        """
-        return await self.stock_selection_strategy.screen_stocks()
+    async def enable_task(self, task_id: str) -> bool:
+        """启用任务"""
+        try:
+            from core.database import get_db, ScheduledTask
+            
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
+                task = db.query(ScheduledTask).filter(
+                    ScheduledTask.task_id == task_id
+                ).first()
+                
+                if not task:
+                    logger.warning(f"任务不存在: {task_id}")
+                    return False
+                    
+                task.is_active = True
+                task.updated_at = datetime.now()
+                db.commit()
+            except Exception as db_e:
+                db.rollback()
+                logger.error(f"数据库操作失败: {db_e}")
+                return False
+            finally:
+                db.close()
+                
+                logger.info(f"成功启用任务: {task_id}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"启用任务失败: {e}")
+            return False
+            
+    async def disable_task(self, task_id: str) -> bool:
+        """禁用任务"""
+        try:
+            from core.database import get_db, ScheduledTask
+            
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
+                task = db.query(ScheduledTask).filter(
+                    ScheduledTask.task_id == task_id
+                ).first()
+                
+                if not task:
+                    logger.warning(f"任务不存在: {task_id}")
+                    return False
+                    
+                task.is_active = False
+                task.updated_at = datetime.now()
+                db.commit()
+            except Exception as db_e:
+                db.rollback()
+                logger.error(f"数据库操作失败: {db_e}")
+                return False
+            finally:
+                db.close()
+                
+                logger.info(f"成功禁用任务: {task_id}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"禁用任务失败: {e}")
+            return False
+            
+    async def remove_task(self, task_id: str) -> bool:
+        """从数据库中移除任务"""
+        try:
+            from core.database import get_db, ScheduledTask
+            
+            db_gen = get_db()
+            db = next(db_gen)
+            try:
+                task = db.query(ScheduledTask).filter(
+                    ScheduledTask.task_id == task_id
+                ).first()
+                
+                if not task:
+                    logger.warning(f"任务不存在: {task_id}")
+                    return False
+                    
+                db.delete(task)
+                db.commit()
+            except Exception as db_e:
+                db.rollback()
+                logger.error(f"数据库操作失败: {db_e}")
+                return False
+            finally:
+                db.close()
+                
+                logger.info(f"成功移除任务: {task_id}")
+                return True
+                
+        except Exception as e:
+             logger.error(f"移除任务失败: {e}")
+             return False

@@ -8,10 +8,13 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from datetime import datetime, date
 from typing import Optional, List, Dict, Any
+from loguru import logger
 
 from config import get_settings
 from services.data_service import DataService
 from services.xtquant_service import XtQuantService
+from services.stock_info_updater import StockInfoUpdater
+from services.stock_info_cache_service import StockInfoCacheService
 
 # 导入统一补全路由
 from ..unified_backfill_routes import router as unified_backfill_router
@@ -31,6 +34,8 @@ router.include_router(
 settings = get_settings()
 data_service = DataService()
 xtquant_service = XtQuantService()
+stock_info_updater = StockInfoUpdater.get_instance()
+stock_cache_service = StockInfoCacheService()
 
 # 响应模型类
 class ApiResponse:
@@ -158,6 +163,85 @@ async def get_stock_list(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/update-stock-info", summary="更新股票基本信息", description="更新全A股股票基本信息到数据库")
+async def update_stock_basic_info():
+    """更新全A股股票基本信息"""
+    try:
+        # 调用股票信息更新器执行更新
+        result = await stock_info_updater.update_all_stock_basic_info()
+        
+        if result.get('success', False):
+            # 更新成功后刷新缓存
+            try:
+                cache_refresh_success = await stock_cache_service.refresh_cache()
+                if cache_refresh_success:
+                    logger.info("股票信息缓存刷新成功")
+                else:
+                    logger.warning("股票信息缓存刷新失败")
+            except Exception as cache_error:
+                logger.error(f"刷新股票信息缓存时发生错误: {cache_error}")
+            
+            return ApiResponse(
+                message="股票基本信息更新成功",
+                data={
+                    "total_count": result.get('total_count', 0),
+                    "success_count": result.get('success_count', 0),
+                    "failed_count": result.get('failed_count', 0),
+                    "duration": f"{result.get('duration', 0):.2f}秒",
+                    "update_time": datetime.now().isoformat(),
+                    "cache_refreshed": cache_refresh_success if 'cache_refresh_success' in locals() else False
+                }
+            ).to_dict()
+        else:
+            return ApiResponse(
+                success=False,
+                message=f"股票基本信息更新失败: {result.get('message', '未知错误')}",
+                data=result
+            ).to_dict()
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"更新股票基本信息时发生错误: {str(e)}, {traceback.format_exc()}"
+        )
+
+@router.get("/stock-info-status", summary="股票信息更新状态", description="获取股票基本信息更新状态")
+async def get_stock_info_update_status():
+    """获取股票基本信息更新状态"""
+    try:
+        # 检查今日是否已更新
+        is_updated_today = await stock_info_updater._is_updated_today()
+        
+        # 获取调度器状态
+        scheduler_running = stock_info_updater.is_running
+        
+        status_info = {
+            "scheduler_status": {
+                "is_running": scheduler_running,
+                "description": "每日自动更新调度器" + ("运行中" if scheduler_running else "已停止")
+            },
+            "update_status": {
+                "updated_today": is_updated_today,
+                "last_check_time": datetime.now().isoformat(),
+                "description": "今日" + ("已更新" if is_updated_today else "未更新")
+            },
+            "next_update": {
+                "scheduled_time": "每日09:00",
+                "condition": "交易日自动执行"
+            }
+        }
+        
+        return ApiResponse(
+            message="获取股票信息更新状态成功",
+            data=status_info
+        ).to_dict()
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"获取股票信息更新状态时发生错误: {str(e)}, {traceback.format_exc()}"
+        )
 
 @router.post("/history", summary="历史数据", description="获取股票历史数据")
 async def get_history_data(request: HistoryDataRequest):

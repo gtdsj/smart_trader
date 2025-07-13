@@ -14,7 +14,8 @@ from abc import ABC, abstractmethod
 
 # 导入新的工具类
 from utils.ma_calculator import MovingAverageCalculator
-
+from services.stock_info_cache_service import StockInfoCacheService
+from services.stock_info_cache_service import get_stock_cache_service
 
 class CustomConditionBase(ABC):
     """自定义条件基类"""
@@ -184,14 +185,38 @@ class IsSTStockCondition(CustomConditionBase):
     
     def calculate(self, stock_data: pd.DataFrame, parameters: Dict[str, Any] = None) -> int:
         try:
-            stock_name = parameters.get('stock_name', '') if parameters else ''
+            stock_code = None
+            if hasattr(stock_data, 'attrs') and 'stock_code' in stock_data.attrs:
+                stock_code = stock_data.attrs['stock_code']
+            elif parameters and 'stock_code' in parameters:
+                stock_code = parameters['stock_code']
+            if not stock_code:
+                logger.warning("无法获取股票代码，无法判断ST股票")
+                return 0
+            
+            # 通过XtQuantService获取股票基础信息
+            
+            stock_info_cache = get_stock_cache_service()
+            stock_info = stock_info_cache.get_stock_info(stock_code)
+            if not stock_info:
+                logger.warning(f"IsSTStockCondition无法获取股票基础信息: {stock_code}")
+                return 0
+            
+            if stock_info.get('is_st', False):
+                return 1
+            stock_name = stock_info.get('stock_name', '')
             
             # ST股票名称包含ST、*ST等标识
             st_keywords = ['ST', '*ST', 'S*ST', 'SST']
-            return 1 if any(keyword in stock_name.upper() for keyword in st_keywords) else 0
+            result = 1 if any(keyword in stock_name.upper() for keyword in st_keywords) else 0
+            
+            logger.info(f"股票 {stock_code}({stock_name}) ST判断结果: {result}")
+            return result
             
         except Exception as e:
             logger.error(f"判断ST股票失败: {e}")
+            import traceback
+            logger.error(f"错误堆栈: {traceback.format_exc()}")
             return 0
     
     def get_name(self) -> str:
@@ -326,14 +351,121 @@ class IsBreakBoardCondition(CustomConditionBase):
     
     def calculate(self, stock_data: pd.DataFrame, parameters: Dict[str, Any] = None) -> int:
         try:
-            # 简化实现：检查是否有涨停后回落的情况
-            # 这里需要更复杂的逻辑来判断破板，暂时返回0
-            # TODO: 需要涨停板数据来准确判断
-            return 0
+            if len(stock_data) < 2:
+                return 0
+            
+            # 获取股票代码
+            stock_code = None
+            if hasattr(stock_data, 'attrs') and 'stock_code' in stock_data.attrs:
+                stock_code = stock_data.attrs['stock_code']
+            elif parameters and 'stock_code' in parameters:
+                stock_code = parameters['stock_code']
+            if not stock_code:
+                logger.warning("无法获取股票代码，无法判断破板")
+                return 0
+            
+            # 获取当前交易日和前一交易日数据
+            current_day = stock_data.iloc[-1]
+            previous_day = stock_data.iloc[-2]
+            
+            # 获取前一交易日收盘价
+            prev_close = float(previous_day['close_price'])
+            
+            # 根据股票类型计算涨停价格
+            limit_up_price = self._calculate_limit_up_price(stock_code, prev_close)
+            
+            if limit_up_price is None:
+                return 0
+            
+            # 获取当日最高价和收盘价
+            current_high = float(current_day['high_price'])
+            current_close = float(current_day['close_price'])
+            
+            # 判断是否破板：当日最高价等于涨停价，且收盘价低于涨停价
+            is_break_board = (
+                abs(current_high - limit_up_price) < 0.005 and  # 最高价触及涨停价（允许0.005的误差）
+                current_close < limit_up_price - 0.005  # 收盘价明显低于涨停价
+            )
+            
+            result = self._convert_value_type(1 if is_break_board else 0)
+            logger.info(f"IsBreakBoardCondition判断结果, stock_code:{stock_code}, {result}")
+            return result
             
         except Exception as e:
             logger.error(f"判断破板股失败: {e}")
+            import traceback
+            logger.error(f"错误堆栈: {traceback.format_exc()}")
             return 0
+    
+    def _calculate_limit_up_price(self, stock_code: str, prev_close: float) -> Optional[float]:
+        """计算涨停价格
+        
+        Args:
+            stock_code: 股票代码
+            prev_close: 前一交易日收盘价
+            
+        Returns:
+            涨停价格，如果无法计算返回None
+        """
+        try:
+            # 获取股票基础信息
+            cache_service = get_stock_cache_service()
+            stock_info = cache_service.get_stock_info(stock_code)
+            if not stock_info:
+                logger.warning(f"IsBreakBoardCondition无法获取股票 {stock_code} 的基础信息")
+                return None
+            
+            # 判断股票类型并确定涨跌幅限制
+            limit_ratio = self._get_limit_ratio(stock_code, stock_info)
+            
+            # 计算涨停价格
+            limit_up_price = prev_close * (1 + limit_ratio)
+            
+            # 四舍五入到分（保留2位小数）
+            limit_up_price = round(limit_up_price, 2)
+            
+            return limit_up_price
+            
+        except Exception as e:
+            logger.error(f"计算涨停价格失败 {stock_code}: {e}")
+            import traceback
+            logger.error(f"错误堆栈: {traceback.format_exc()}")
+            return None
+    
+    def _get_limit_ratio(self, stock_code: str, stock_info: Dict[str, Any]) -> float:
+        """获取涨跌幅限制比例
+        
+        Args:
+            stock_code: 股票代码
+            stock_info: 股票基础信息
+            
+        Returns:
+            涨跌幅限制比例（如0.1表示10%）
+        """
+        try:
+            # ST股票：5%
+            if stock_info.get('is_st', False):
+                return 0.05
+            
+            # 创业板（300开头）：20%
+            if stock_code.startswith('30'):
+                return 0.20
+            
+            # 科创板（688开头）：20%
+            if stock_code.startswith('688'):
+                return 0.20
+            
+            # 北交所（8开头，43开头）：30%
+            if stock_code.startswith('8') or stock_code.startswith('43'):
+                return 0.30
+            
+            # 其他A股（主板）：10%
+            return 0.10
+            
+        except Exception as e:
+            logger.error(f"获取涨跌幅限制失败 {stock_code}: {e}")
+            # 默认返回10%
+            return 0.10
     
     def get_name(self) -> str:
         return "is_break_board"
