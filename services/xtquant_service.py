@@ -502,7 +502,6 @@ class XtQuantService:
                                         continue
                                 
                                 result[stock_code] = df
-                                logger.info(f"股票{stock_code}数据处理完成，shape: {df.shape}")
                             else:
                                 logger.warning(f"股票{stock_code}在返回数据中未找到有效字段")
                                 
