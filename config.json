@@ -14,6 +14,11 @@
     "path": "D:\\smart_trader\\data\\smart_trader.db",
     "memory": false
   },
+  "feishu":{
+    "app_id": "cli_a8f1bda19a65100b",
+    "app_secret": "KI3wvHAL0mUcJHzHZeqN6dXQFz7vgapy",
+    "enabled": true
+  },
   "xtquant": {
     "path": "D:\\江海证券QMT实盘_交易\\userdata_mini",
     "session_id": 123456,

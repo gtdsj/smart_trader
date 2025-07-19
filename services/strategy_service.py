@@ -96,6 +96,7 @@ class StrategyService:
     async def get_strategies(self, active_only: bool = False) -> List[Dict[str, Any]]:
         """获取策略列表"""
         try:
+            logger.info(f"获取策略列表, get_strategies, active_only: {active_only}")
             db_gen = get_db()
             db = next(db_gen)
             try:
@@ -106,7 +107,8 @@ class StrategyService:
                 
                 result = db.execute(query)
                 strategies = result.scalars().all()
-
+                
+                logger.info(f"获取到的策略数量: {len(strategies)}")
                 return [
                     {
                         "id": strategy.id,

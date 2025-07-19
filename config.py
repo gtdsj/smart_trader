@@ -60,6 +60,13 @@ class DingTalkConfig(BaseModel):
     enabled: bool = Field(default=False, description="是否启用钉钉通知")
 
 
+class FeishuConfig(BaseModel):
+    """飞书机器人配置"""
+    app_id: str = Field(default="", description="飞书应用ID")
+    app_secret: str = Field(default="", description="飞书应用密钥")
+    enabled: bool = Field(default=False, description="是否启用飞书机器人")
+
+
 class TradingConfig(BaseModel):
     """交易配置"""
     max_position_ratio: float = Field(default=0.95, description="最大仓位比例")
@@ -100,6 +107,7 @@ class SystemConfig(BaseModel):
     # redis: RedisConfig = Field(default_factory=RedisConfig)  # 已移除Redis配置
     xtquant: XtQuantConfig = Field(default_factory=XtQuantConfig)
     dingtalk: DingTalkConfig = Field(default_factory=DingTalkConfig)
+    feishu: FeishuConfig = Field(default_factory=FeishuConfig)
     trading: TradingConfig = Field(default_factory=TradingConfig)
     backtest: BacktestConfig = Field(default_factory=BacktestConfig)
 
@@ -174,6 +182,11 @@ class ConfigManager:
             'DINGTALK_WEBHOOK_URL': ['dingtalk', 'webhook_url'],
             'DINGTALK_SECRET': ['dingtalk', 'secret'],
             'DINGTALK_ENABLED': ['dingtalk', 'enabled'],
+            
+            # 飞书配置
+            'FEISHU_APP_ID': ['feishu', 'app_id'],
+            'FEISHU_APP_SECRET': ['feishu', 'app_secret'],
+            'FEISHU_ENABLED': ['feishu', 'enabled'],
             
             # 交易配置
             'TRADING_MAX_POSITION_RATIO': ['trading', 'max_position_ratio'],

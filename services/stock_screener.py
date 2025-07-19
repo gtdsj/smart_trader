@@ -86,7 +86,6 @@ class StockScreener:
                 stock_list=stock_list,
                 screen_date=screen_date
             )
-            
             execution_time = (datetime.now() - start_time).total_seconds()
             
             # 保存筛选结果

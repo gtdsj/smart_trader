@@ -3,6 +3,8 @@
 策略管理服务模块
 提供策略的创建、更新、删除、查询和执行功能
 """
+
+import threading
 import traceback
 import asyncio
 from typing import Dict, List, Optional, Any, Tuple
@@ -78,7 +80,17 @@ class SignalType(Enum):
 
 class StrategyManager:
     """策略管理器"""
+    _instance = None
+    _lock = threading.Lock()
     
+    def __new__(cls):
+        """单例模式"""
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+
     def __init__(self):
         self.settings = get_settings()
         self.cache_client = get_cache_client()

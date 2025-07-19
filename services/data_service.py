@@ -297,7 +297,7 @@ class DataService:
         """获取实时行情数据"""
         try:
             # 使用XtQuantService获取实时数据
-            realtime_result = await self.xtquant_service.get_real_time_data(stock_codes)
+            realtime_result = await self.xtquant_service.get_realtime_data(stock_codes)
             
             if realtime_result["success"]:
                 result = realtime_result["data"]

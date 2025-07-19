@@ -46,6 +46,7 @@ xtdata
 
 # Notification
 DingtalkChatbot==1.5.7
+lark_oapi==1.2.4
 
 # Configuration and Time
 python-dotenv==1.0.0

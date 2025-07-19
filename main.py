@@ -4,11 +4,49 @@
 """
 
 import uvicorn
-from fastapi import FastAPI, Depends
+import asyncio
+import signal
+import threading
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from config import get_settings, SystemConfig
 from utils.log_config import setup_logging, get_logger
+
+
+async def run_feishu_bot_in_executor(feishu_service):
+    """在执行器中运行飞书机器人
+    
+    Args:
+        feishu_service: 飞书机器人服务实例
+    """
+    loop = asyncio.get_event_loop()
+    
+    def run_feishu_bot():
+        """运行飞书机器人的函数"""
+        try:
+            # 启动飞书机器人
+            feishu_service.start()
+        except KeyboardInterrupt:
+            logger.info("飞书机器人接收到键盘中断")
+        except Exception as e:
+            logger.error(f"飞书机器人运行异常: {e}")
+            import traceback
+            logger.error(f"错误详情: {traceback.format_exc()}")
+        finally:
+            logger.info("飞书机器人执行器函数已退出")
+    
+    try:
+        await loop.run_in_executor(None, run_feishu_bot)
+    except asyncio.CancelledError:
+        logger.info("飞书机器人任务被取消")
+        feishu_service.stop()
+        raise
+    except Exception as e:
+        logger.error(f"飞书机器人在执行器中运行失败: {e}")
+        import traceback
+        logger.error(f"错误详情: {traceback.format_exc()}")
+        raise
 
 # 获取logger实例
 logger = get_logger()
@@ -29,6 +67,7 @@ from services.strategy_manager import StrategyManager
 from services.strategy_executor import StrategyExecutor
 from services.scheduler_service import SchedulerService
 from services.stock_info_cache_service import StockInfoCacheService
+from services.feishu_bot_service import FeishuBotService
 
 
 @asynccontextmanager
@@ -95,6 +134,30 @@ async def lifespan(app: FastAPI):
         await stock_cache_service.initialize()
         logger.info("股票信息缓存服务初始化完成")
         
+        # 初始化飞书机器人服务
+        feishu_bot_service = None
+        feishu_task = None
+        if settings.feishu.enabled and settings.feishu.app_id and settings.feishu.app_secret:
+            try:
+                logger.info("开始初始化飞书机器人服务...")
+                feishu_bot_service = FeishuBotService(
+                    app_id=settings.feishu.app_id,
+                    app_secret=settings.feishu.app_secret,
+                    loop=asyncio.get_running_loop()
+                )
+                
+                # 使用 asyncio.create_task 而不是 threading.Thread
+                feishu_task = asyncio.create_task(
+                    run_feishu_bot_in_executor(feishu_bot_service)
+                )
+                logger.info("飞书机器人服务初始化完成")
+            except Exception as e:
+                logger.error(f"飞书机器人服务初始化失败: {e}")
+                import traceback
+                logger.error(f"错误详情: {traceback.format_exc()}")
+        else:
+            logger.info("飞书机器人服务未启用或配置不完整，跳过初始化")
+        
         # 设置服务依赖
         strategy_executor.set_data_service(data_service)
         strategy_executor.set_strategy_manager(strategy_manager)
@@ -114,6 +177,8 @@ async def lifespan(app: FastAPI):
         app.state.notification_service = notification_service
         app.state.xtquant_service = xtquant_service
         app.state.stock_cache_service = stock_cache_service
+        app.state.feishu_bot_service = feishu_bot_service
+        app.state.feishu_task = feishu_task
         
         logger.info("所有服务启动完成")
         
@@ -143,7 +208,7 @@ async def lifespan(app: FastAPI):
         
         if hasattr(app.state, 'xtquant_service'):
             try:
-                app.state.xtquant_service.stop()
+                await app.state.xtquant_service.stop()
                 logger.info("XtQuant服务已停止")
             except Exception as e:
                 logger.error(f"停止XtQuant服务失败: {e}")
@@ -175,6 +240,22 @@ async def lifespan(app: FastAPI):
                 logger.info("通知服务已停止")
             except Exception as e:
                 logger.error(f"停止通知服务失败: {e}")
+        
+        if hasattr(app.state, 'feishu_bot_service') and app.state.feishu_bot_service:
+            try:
+                app.state.feishu_bot_service.stop()
+                
+                # 优雅停止异步任务
+                if hasattr(app.state, 'feishu_task') and app.state.feishu_task and not app.state.feishu_task.done():
+                    app.state.feishu_task.cancel()
+                    try:
+                        await app.state.feishu_task
+                    except asyncio.CancelledError:
+                        logger.info("飞书机器人异步任务已取消")
+                        
+                logger.info("飞书机器人服务已停止")
+            except Exception as e:
+                logger.error(f"停止飞书机器人服务失败: {e}")
         
         logger.info("所有服务已停止")
 
