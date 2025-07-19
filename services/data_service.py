@@ -2,6 +2,7 @@
 """
 数据服务模块
 """
+import json
 import traceback
 import asyncio
 import time
@@ -269,8 +270,12 @@ class DataService:
             cache_key = f"stock_list:{market or 'ALL'}"
             cached_data = await self.cache_client.get(cache_key)
             if cached_data:
-                logger.debug(f"从缓存获取{market or '全部'}市场股票列表")
-                return cached_data
+                logger.debug(f"从缓存获取{market or '全部'}市场股票列表,{type(cached_data)}")
+                try:
+                    return json.loads(cached_data)
+                except:
+                    logger.error(f"从缓存获取{market or '全部'}市场股票列表,解析失败:{traceback.format_exc()}")
+                    return cached_data
             
             # 从XtQuant获取
             stock_result = await self.xtquant_service.get_stock_list()
