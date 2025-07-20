@@ -1,14 +1,17 @@
 """API响应模型"""
 
-from typing import Any, Optional
+"""API响应模型"""
+
+from typing import Any, Optional, TypeVar, Generic
 from pydantic import BaseModel, Field
 
+T = TypeVar('T')
 
-class ApiResponse(BaseModel):
+class ApiResponse(BaseModel, Generic[T]):
     """统一API响应模型"""
     success: bool = Field(..., description="请求是否成功")
     message: str = Field(..., description="响应消息")
-    data: Optional[Any] = Field(None, description="响应数据")
+    data: Optional[T] = Field(None, description="响应数据")
     code: Optional[int] = Field(None, description="响应代码")
     timestamp: Optional[str] = Field(None, description="响应时间戳")
     

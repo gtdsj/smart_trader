@@ -10,6 +10,8 @@ from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from loguru import logger
 
+from models.api_response import ApiResponse
+
 from config import get_settings
 from services.data_service import DataService
 from services.xtquant_service import XtQuantService
@@ -37,21 +39,7 @@ xtquant_service = XtQuantService()
 stock_info_updater = StockInfoUpdater.get_instance()
 stock_cache_service = StockInfoCacheService()
 
-# 响应模型类
-class ApiResponse:
-    def __init__(self, success=True, message="", data=None):
-        self.success = success
-        self.message = message
-        self.data = data
-        self.timestamp = datetime.now().isoformat()
 
-    def to_dict(self):
-        return {
-            "success": self.success,
-            "message": self.message,
-            "data": self.data,
-            "timestamp": self.timestamp
-        }
 
 # 请求模型
 class StockListRequest(BaseModel):
@@ -99,10 +87,7 @@ async def get_data_overview():
             }
         }
         
-        return ApiResponse(
-            message="获取数据概览成功",
-            data=overview
-        ).to_dict()
+        return ApiResponse.success_response(message="获取数据概览成功", data=overview).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{str(e)}, {traceback.format_exc()}")
@@ -156,10 +141,7 @@ async def get_stock_list(
             }
         }
         
-        return ApiResponse(
-            message="获取股票列表成功",
-            data=result
-        ).to_dict()
+        return ApiResponse.success_response(message="获取股票列表成功", data=result).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -182,7 +164,7 @@ async def update_stock_basic_info():
             except Exception as cache_error:
                 logger.error(f"刷新股票信息缓存时发生错误: {cache_error}")
             
-            return ApiResponse(
+            return ApiResponse.success_response(
                 message="股票基本信息更新成功",
                 data={
                     "total_count": result.get('total_count', 0),
@@ -192,13 +174,12 @@ async def update_stock_basic_info():
                     "update_time": datetime.now().isoformat(),
                     "cache_refreshed": cache_refresh_success if 'cache_refresh_success' in locals() else False
                 }
-            ).to_dict()
+            ).model_dump()
         else:
-            return ApiResponse(
-                success=False,
+            return ApiResponse.error_response(
                 message=f"股票基本信息更新失败: {result.get('message', '未知错误')}",
                 data=result
-            ).to_dict()
+            ).model_dump()
             
     except Exception as e:
         raise HTTPException(
@@ -232,10 +213,7 @@ async def get_stock_info_update_status():
             }
         }
         
-        return ApiResponse(
-            message="获取股票信息更新状态成功",
-            data=status_info
-        ).to_dict()
+        return ApiResponse.success_response(message="获取股票信息更新状态成功", data=status_info).model_dump()
         
     except Exception as e:
         raise HTTPException(
@@ -308,10 +286,7 @@ async def get_history_data(request: HistoryDataRequest):
             "total_records": sum(len(data["data"]) for data in history_data.values())
         }
         
-        return ApiResponse(
-            message="获取历史数据成功",
-            data=result
-        ).to_dict()
+        return ApiResponse.success_response(message="获取历史数据成功", data=result).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -372,10 +347,7 @@ async def get_realtime_data(request: RealtimeDataRequest):
             "update_time": datetime.now().isoformat()
         }
         
-        return ApiResponse(
-            message="获取实时数据成功",
-            data=result
-        ).to_dict()
+        return ApiResponse.success_response(message="获取实时数据成功", data=result).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -411,10 +383,7 @@ def get_market_status():
             }
         }
         
-        return ApiResponse(
-            message="获取市场状态成功",
-            data=market_status
-        ).to_dict()
+        return ApiResponse.success_response(message="获取市场状态成功", data=market_status).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -477,10 +446,7 @@ def get_stock_detail(stock_code: str):
             "last_update": datetime.now().isoformat()
         }
         
-        return ApiResponse(
-            message="获取股票详情成功",
-            data=stock_detail
-        ).to_dict()
+        return ApiResponse.success_response(message="获取股票详情成功", data=stock_detail).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

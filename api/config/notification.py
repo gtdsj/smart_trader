@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, Dict, List
 
+from models.api_response import ApiResponse
+
 from config import get_settings
 
 # 创建通知配置路由器
@@ -17,21 +19,7 @@ router = APIRouter(prefix="/notification", tags=["通知配置"])
 # 获取配置
 settings = get_settings()
 
-# 响应模型类
-class ApiResponse:
-    def __init__(self, success=True, message="", data=None):
-        self.success = success
-        self.message = message
-        self.data = data
-        self.timestamp = datetime.now().isoformat()
 
-    def to_dict(self):
-        return {
-            "success": self.success,
-            "message": self.message,
-            "data": self.data,
-            "timestamp": self.timestamp
-        }
 
 # 请求模型
 class NotificationConfigRequest(BaseModel):
@@ -96,10 +84,10 @@ def get_notification_config():
             })
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取通知配置成功",
             data=config
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -142,10 +130,10 @@ def update_notification_config(config_request: NotificationConfigRequest):
             "updated_at": datetime.now().isoformat()
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="通知配置更新成功",
             data=updated_config
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -168,10 +156,10 @@ def get_dingtalk_config():
         if dingtalk_config.get('secret'):
             dingtalk_config['secret'] = "***"
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取钉钉配置成功",
             data=dingtalk_config
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -189,10 +177,10 @@ def update_dingtalk_config(dingtalk_request: DingTalkConfigRequest):
             "updated_at": datetime.now().isoformat()
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="钉钉配置更新成功",
             data=updated_config
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -218,7 +206,7 @@ def get_email_config():
         return ApiResponse(
             message="获取邮件配置成功",
             data=email_config
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -242,7 +230,7 @@ def update_email_config(email_request: EmailConfigRequest):
         return ApiResponse(
             message="邮件配置更新成功",
             data=updated_config
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

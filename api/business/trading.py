@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
+from models.api_response import ApiResponse
+
 from config import get_settings
 from services.trading_service import TradingService
 from services.xtquant_service import XtQuantService
@@ -21,21 +23,7 @@ settings = get_settings()
 trading_service = TradingService()
 xtquant_service = XtQuantService()
 
-# 响应模型类
-class ApiResponse:
-    def __init__(self, success=True, message="", data=None):
-        self.success = success
-        self.message = message
-        self.data = data
-        self.timestamp = datetime.now().isoformat()
 
-    def to_dict(self):
-        return {
-            "success": self.success,
-            "message": self.message,
-            "data": self.data,
-            "timestamp": self.timestamp
-        }
 
 # 请求模型
 class OrderRequest(BaseModel):
@@ -94,10 +82,7 @@ async def get_trading_overview():
             }
         }
         
-        return ApiResponse(
-            message="获取交易概览成功",
-            data=overview
-        ).to_dict()
+        return ApiResponse.success_response(data=overview, message="获取交易概览成功").model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{str(e)}, {traceback.format_exc()}")
@@ -135,10 +120,7 @@ async def place_order(order_request: OrderRequest):
         else:
             raise HTTPException(status_code=400, detail="下单失败")
         
-        return ApiResponse(
-            message="订单提交成功",
-            data=response_data
-        ).to_dict()
+        return ApiResponse.success_response(data=response_data, message="订单提交成功").model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -163,10 +145,7 @@ async def cancel_order(order_id: str, cancel_request: CancelOrderRequest):
         else:
             raise HTTPException(status_code=400, detail="撤单失败")
         
-        return ApiResponse(
-            message="订单撤销成功",
-            data=response_data
-        ).to_dict()
+        return ApiResponse.success_response(data=response_data, message="订单撤销成功").model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -208,10 +187,7 @@ async def get_orders(date: Optional[str] = None, status: Optional[str] = None, l
             }
         }
         
-        return ApiResponse(
-            message="获取订单列表成功",
-            data=result
-        ).to_dict()
+        return ApiResponse.success_response(data=result, message="获取订单列表成功").model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -252,10 +228,7 @@ def get_order_detail(order_id: str):
             ]
         }
         
-        return ApiResponse(
-            message="获取订单详情成功",
-            data=order_detail
-        ).to_dict()
+        return ApiResponse.success_response(data=order_detail, message="获取订单详情成功").model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -305,10 +278,7 @@ async def get_positions(position_request: PositionRequest = PositionRequest()):
             }
         }
         
-        return ApiResponse(
-            message="获取持仓列表成功",
-            data=result
-        ).to_dict()
+        return ApiResponse.success_response(data=result, message="获取持仓列表成功").model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -353,10 +323,7 @@ def get_trades(date: Optional[str] = None, stock_code: Optional[str] = None, lim
             }
         }
         
-        return ApiResponse(
-            message="获取成交列表成功",
-            data=result
-        ).to_dict()
+        return ApiResponse.success_response(data=result, message="获取成交列表成功").model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -434,10 +401,7 @@ async def get_account_asset():
                 "error": str(e)
             }
         
-        return ApiResponse(
-            message="获取账户资产成功",
-            data=asset
-        ).to_dict()
+        return ApiResponse.success_response(data=asset, message="获取账户资产成功").model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

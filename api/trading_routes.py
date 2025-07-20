@@ -9,6 +9,8 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from loguru import logger
 
+from models.api_response import ApiResponse
+
 from services.trading_service import TradingService, OrderType, PriceType
 
 # 创建路由器
@@ -107,11 +109,7 @@ class AssetInfo(BaseModel):
     profit_loss_rate: float = Field(..., description="盈亏率")
 
 
-class ApiResponse(BaseModel):
-    """API响应基类"""
-    success: bool = Field(..., description="是否成功")
-    message: str = Field(..., description="响应消息")
-    data: Any = Field(None, description="响应数据")
+
 
 
 # API路由
@@ -127,11 +125,10 @@ async def get_trading_service_status(service: TradingService = Depends(get_tradi
             "simulation_mode": not service.xt_trader
         }
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message="获取交易服务状态成功",
             data=status
-        )
+        ).model_dump()
     except Exception as e:
         logger.error(f"获取交易服务状态失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -143,11 +140,10 @@ async def start_trading_service(service: TradingService = Depends(get_trading_se
     try:
         success = await service.start()
         if success:
-            return ApiResponse(
-                success=True,
+            return ApiResponse.success_response(
                 message="交易服务启动成功",
                 data=None
-            )
+            ).model_dump()
         else:
             raise HTTPException(status_code=500, detail="交易服务启动失败")
     except Exception as e:
@@ -160,11 +156,10 @@ async def stop_trading_service(service: TradingService = Depends(get_trading_ser
     """停止交易服务"""
     try:
         await service.stop()
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message="交易服务停止成功",
             data=None
-        )
+        ).model_dump()
     except Exception as e:
         logger.error(f"停止交易服务失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -211,7 +206,7 @@ async def place_order(
                 success=True,
                 message="下单成功",
                 data={"order_id": order_id}
-            )
+            ).model_dump()
         else:
             raise HTTPException(status_code=500, detail="下单失败")
     
@@ -235,7 +230,7 @@ async def cancel_order(
                 success=True,
                 message="撤单成功",
                 data=None
-            )
+            ).model_dump()
         else:
             raise HTTPException(status_code=500, detail="撤单失败")
     except Exception as e:
@@ -284,7 +279,7 @@ async def get_orders(
             success=True,
             message="查询订单成功",
             data=orders
-        )
+        ).model_dump()
     except HTTPException:
         raise
     except Exception as e:
@@ -352,7 +347,7 @@ async def get_trades(
             success=True,
             message="查询成交记录成功",
             data=trades
-        )
+        ).model_dump()
     except HTTPException:
         raise
     except Exception as e:
@@ -372,7 +367,7 @@ async def get_positions(service: TradingService = Depends(get_trading_service)):
                 success=True,
                 message="查询持仓成功" if positions else "当前无持仓",
                 data=positions
-            )
+            ).model_dump()
         else:
             return ApiResponse(
                 success=False,
@@ -427,7 +422,7 @@ async def get_asset(service: TradingService = Depends(get_trading_service)):
                 success=True,
                 message="查询资产成功",
                 data=asset
-            )
+            ).model_dump()
         else:
             raise HTTPException(status_code=500, detail="查询资产失败")
     except Exception as e:

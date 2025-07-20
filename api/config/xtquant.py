@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, Dict
 
+from models.api_response import ApiResponse
+
 from config import get_settings
 
 # 创建XtQuant配置路由器
@@ -18,20 +20,7 @@ router = APIRouter(prefix="/xtquant", tags=["XtQuant配置"])
 settings = get_settings()
 
 # 响应模型类
-class ApiResponse:
-    def __init__(self, success=True, message="", data=None):
-        self.success = success
-        self.message = message
-        self.data = data
-        self.timestamp = datetime.now().isoformat()
 
-    def to_dict(self):
-        return {
-            "success": self.success,
-            "message": self.message,
-            "data": self.data,
-            "timestamp": self.timestamp
-        }
 
 # 请求模型
 class XtQuantConfigRequest(BaseModel):
@@ -78,10 +67,10 @@ def get_xtquant_config():
             }
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取XtQuant配置成功",
             data=config
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -111,10 +100,10 @@ def update_xtquant_config(config_request: XtQuantConfigRequest):
             "updated_at": datetime.now().isoformat()
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="XtQuant配置更新成功",
             data=updated_config
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -145,10 +134,10 @@ def get_xtquant_status():
             "last_check": datetime.now().isoformat()
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取XtQuant状态成功",
             data=status
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -166,10 +155,10 @@ def connect_xtquant():
             "callback_registered": True
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="XtQuant连接成功",
             data=connection_result
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -185,10 +174,10 @@ def disconnect_xtquant():
             "cleanup_completed": True
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="XtQuant断开成功",
             data=disconnect_result
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -232,7 +221,7 @@ def test_xtquant_connection(test_request: ConnectionTestRequest):
         return ApiResponse(
             message="XtQuant连接测试完成",
             data=test_result
-        ).to_dict()
+        ).model_dump()
         
     except HTTPException:
         raise
@@ -263,7 +252,7 @@ def get_account_info():
         return ApiResponse(
             message="获取账户信息成功",
             data=account_info
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -299,7 +288,7 @@ def validate_xtquant_config():
         return ApiResponse(
             message="XtQuant配置验证完成",
             data=validation_result
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -10,6 +10,8 @@ from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 import json
 
+from models.api_response import ApiResponse
+
 from config import get_settings
 
 # 创建回测业务路由器
@@ -18,21 +20,7 @@ router = APIRouter(prefix="/backtest", tags=["回测业务"])
 # 获取配置
 settings = get_settings()
 
-# 响应模型类
-class ApiResponse:
-    def __init__(self, success=True, message="", data=None):
-        self.success = success
-        self.message = message
-        self.data = data
-        self.timestamp = datetime.now().isoformat()
 
-    def to_dict(self):
-        return {
-            "success": self.success,
-            "message": self.message,
-            "data": self.data,
-            "timestamp": self.timestamp
-        }
 
 # 请求模型
 class BacktestCreateRequest(BaseModel):
@@ -93,10 +81,7 @@ def get_backtest_overview():
             }
         }
         
-        return ApiResponse(
-            message="获取回测概览成功",
-            data=overview
-        ).to_dict()
+        return ApiResponse.success_response(message="获取回测概览成功", data=overview).model_dump()
         
     except Exception as e:
         logger.error(f"创建回测任务失败: {e}, {traceback.format_exc()}")
@@ -174,10 +159,7 @@ def get_backtest_list(
             }
         }
         
-        return ApiResponse(
-            message="获取回测列表成功",
-            data=result
-        ).to_dict()
+        return ApiResponse.success_response(message="获取回测列表成功", data=result).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -207,10 +189,7 @@ def create_backtest(request: BacktestCreateRequest):
             "created_at": datetime.now().isoformat()
         }
         
-        return ApiResponse(
-            message="回测任务创建成功",
-            data=new_backtest
-        ).to_dict()
+        return ApiResponse.success_response(message="回测任务创建成功", data=new_backtest).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

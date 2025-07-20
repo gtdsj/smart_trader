@@ -12,7 +12,7 @@ from loguru import logger
 
 from services.stock_screener import StockScreener
 from services.data_service import DataService
-from api.strategy_manager_routes import ApiResponse
+from models.api_response import ApiResponse
 
 
 router = APIRouter(prefix="/api/screener", tags=["股票筛选"])
@@ -121,11 +121,10 @@ async def screen_stocks_by_strategy(
             execution_time=result["execution_time"]
         )
         
-        return {
-            "success": True,
-            "message": "策略筛选完成",
-            "data": screening_result
-        }
+        return ApiResponse.success_response(
+            message="策略筛选完成",
+            data=screening_result
+        ).model_dump()
         
     except HTTPException:
         raise
@@ -167,11 +166,10 @@ async def screen_stocks_by_expression(
             expression_description=result.get("expression_description")
         )
         
-        return {
-            "success": True,
-            "message": "表达式筛选完成",
-            "data": screening_result
-        }
+        return ApiResponse.success_response(
+            message="表达式筛选完成",
+            data=screening_result
+        ).model_dump()
         
     except Exception as e:
         logger.error(f"表达式筛选API错误: {e}")

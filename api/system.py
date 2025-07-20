@@ -11,6 +11,7 @@ from typing import Dict, Any
 from config import get_settings
 from core.local_cache import get_cache
 from core.duckdb_adapter import get_duckdb
+from models.api_response import ApiResponse
 
 # 创建系统路由器
 system_router = APIRouter(prefix="/api")
@@ -18,26 +19,10 @@ system_router = APIRouter(prefix="/api")
 # 获取配置
 settings = get_settings()
 
-# 响应模型类
-class ApiResponse:
-    def __init__(self, success=True, message="", data=None):
-        self.success = success
-        self.message = message
-        self.data = data
-        self.timestamp = datetime.now().isoformat()
-
-    def to_dict(self):
-        return {
-            "success": self.success,
-            "message": self.message,
-            "data": self.data,
-            "timestamp": self.timestamp
-        }
-
 @system_router.get("/", summary="根路径", description="API服务根路径，返回基本信息")
 def root():
     """根路径"""
-    return ApiResponse(
+    return ApiResponse.success_response(
         message="欢迎使用 {} v{}".format(settings.app_name, settings.version),
         data={
             "app_name": settings.app_name,
@@ -46,7 +31,7 @@ def root():
             "redoc": "/redoc",
             "api_prefix": "/api"
         }
-    ).to_dict()
+    ).model_dump()
 
 @system_router.get("/status", summary="系统状态", description="获取系统运行状态")
 def get_status():
@@ -64,10 +49,10 @@ def get_status():
             "timestamp": datetime.now().isoformat()
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="系统运行正常",
             data=status
-        ).to_dict()
+        ).model_dump()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -100,10 +85,10 @@ def health_check():
         if not overall_healthy:
             raise HTTPException(status_code=status_code, detail=health_data)
             
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="系统健康",
             data=health_data
-        ).to_dict()
+        ).model_dump()
         
     except HTTPException:
         raise
@@ -144,10 +129,10 @@ def get_info():
             "timestamp": datetime.now().isoformat()
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取系统信息成功",
             data=info
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -169,10 +154,10 @@ def get_cache_info():
             "timestamp": datetime.now().isoformat()
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取缓存信息成功",
             data=info
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -184,9 +169,9 @@ def clear_cache():
         cache = get_cache()
         cache.clear()
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="缓存清空成功"
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -206,10 +191,10 @@ def get_database_info():
             "timestamp": datetime.now().isoformat()
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取数据库信息成功",
             data=info
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

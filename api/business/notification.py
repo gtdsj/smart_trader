@@ -11,6 +11,7 @@ from typing import Optional, List, Dict, Any
 from enum import Enum
 
 from config import get_settings
+from models.api_response import ApiResponse
 
 # 创建通知业务路由器
 router = APIRouter(prefix="/notification", tags=["通知业务"])
@@ -18,21 +19,7 @@ router = APIRouter(prefix="/notification", tags=["通知业务"])
 # 获取配置
 settings = get_settings()
 
-# 响应模型类
-class ApiResponse:
-    def __init__(self, success=True, message="", data=None):
-        self.success = success
-        self.message = message
-        self.data = data
-        self.timestamp = datetime.now().isoformat()
 
-    def to_dict(self):
-        return {
-            "success": self.success,
-            "message": self.message,
-            "data": self.data,
-            "timestamp": self.timestamp
-        }
 
 # 枚举类
 class NotificationType(str, Enum):
@@ -121,10 +108,10 @@ def get_notification_overview():
             }
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取通知概览成功",
             data=overview
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{str(e)}, {traceback.format_exc()}")
@@ -199,10 +186,10 @@ def get_notification_list(
             }
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取通知列表成功",
             data=result
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -236,10 +223,10 @@ def send_notification(request: NotificationSendRequest):
             "tags": request.tags or []
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="通知发送成功",
             data=notification
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -289,10 +276,7 @@ def get_notification_detail(notification_id: str):
             }
         }
         
-        return ApiResponse(
-            message="获取通知详情成功",
-            data=notification_detail
-        ).to_dict()
+        return ApiResponse.success_response(message="获取通知详情成功", data=notification_detail).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -313,10 +297,7 @@ def retry_notification(notification_id: str):
             }
         }
         
-        return ApiResponse(
-            message="通知重试成功",
-            data=retry_result
-        ).to_dict()
+        return ApiResponse.success_response(message="通知重试成功", data=retry_result).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -355,10 +336,7 @@ def get_notification_templates():
             }
         ]
         
-        return ApiResponse(
-            message="获取通知模板列表成功",
-            data={"templates": templates, "total": len(templates)}
-        ).to_dict()
+        return ApiResponse.success_response(message="获取通知模板列表成功", data={"templates": templates, "total": len(templates)}).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -384,10 +362,7 @@ def create_notification_template(request: NotificationTemplateRequest):
             "usage_count": 0
         }
         
-        return ApiResponse(
-            message="通知模板创建成功",
-            data=new_template
-        ).to_dict()
+        return ApiResponse.success_response(message="通知模板创建成功", data=new_template).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -445,10 +420,7 @@ def get_notification_rules():
             }
         ]
         
-        return ApiResponse(
-            message="获取通知规则列表成功",
-            data={"rules": rules, "total": len(rules)}
-        ).to_dict()
+        return ApiResponse.success_response(message="获取通知规则列表成功", data={"rules": rules, "total": len(rules)}).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -474,10 +446,7 @@ def create_notification_rule(request: NotificationRuleRequest):
             "last_triggered": None
         }
         
-        return ApiResponse(
-            message="通知规则创建成功",
-            data=new_rule
-        ).to_dict()
+        return ApiResponse.success_response(message="通知规则创建成功", data=new_rule).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -504,10 +473,7 @@ def test_notification(
             }
         }
         
-        return ApiResponse(
-            message="通知测试成功",
-            data=test_result
-        ).to_dict()
+        return ApiResponse.success_response(message="通知测试成功", data=test_result).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

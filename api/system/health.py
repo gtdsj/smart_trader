@@ -10,6 +10,8 @@ from typing import Dict, Any
 import traceback
 import logging
 
+from models.api_response import ApiResponse
+
 from config import get_settings
 from core.local_cache import get_cache
 from core.duckdb_adapter import get_duckdb
@@ -22,21 +24,7 @@ router = APIRouter(prefix="/health", tags=["系统健康"])
 # 获取配置
 settings = get_settings()
 
-# 响应模型类
-class ApiResponse:
-    def __init__(self, success=True, message="", data=None):
-        self.success = success
-        self.message = message
-        self.data = data
-        self.timestamp = datetime.now().isoformat()
 
-    def to_dict(self):
-        return {
-            "success": self.success,
-            "message": self.message,
-            "data": self.data,
-            "timestamp": self.timestamp
-        }
 
 @router.get("/", summary="健康检查", description="系统整体健康检查")
 def health_check():
@@ -67,10 +55,7 @@ def health_check():
         if not overall_healthy:
             raise HTTPException(status_code=status_code, detail=health_data)
             
-        return ApiResponse(
-            message="系统健康",
-            data=health_data
-        ).to_dict()
+        return ApiResponse.success_response(message="系统健康", data=health_data).model_dump()
         
     except HTTPException:
         raise
@@ -103,10 +88,7 @@ def cache_health():
             }
         }
         
-        return ApiResponse(
-            message="缓存系统健康",
-            data=health_data
-        ).to_dict()
+        return ApiResponse.success_response(message="缓存系统健康", data=health_data).model_dump()
         
     except HTTPException:
         raise
@@ -135,10 +117,7 @@ def database_health():
             }
         }
         
-        return ApiResponse(
-            message="数据库连接健康",
-            data=health_data
-        ).to_dict()
+        return ApiResponse.success_response(message="数据库连接健康", data=health_data).model_dump()
         
     except HTTPException:
         raise
@@ -166,10 +145,7 @@ def readiness_check():
         if not ready:
             raise HTTPException(status_code=503, detail=readiness_data)
             
-        return ApiResponse(
-            message="系统已就绪",
-            data=readiness_data
-        ).to_dict()
+        return ApiResponse.success_response(message="系统已就绪", data=readiness_data).model_dump()
         
     except HTTPException:
         raise
@@ -187,10 +163,7 @@ def liveness_check():
             "timestamp": datetime.now().isoformat()
         }
         
-        return ApiResponse(
-            message="系统存活",
-            data=liveness_data
-        ).to_dict()
+        return ApiResponse.success_response(message="系统存活", data=liveness_data).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

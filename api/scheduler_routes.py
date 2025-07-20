@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-# from api.base import ApiResponse  # 使用本地定义
+from models.api_response import ApiResponse
 from services.scheduler_service import SchedulerService, ScheduledTask, TaskType, TaskStatus
 from services.data_service import DataService
 from services.notification_service import NotificationService
@@ -20,13 +20,6 @@ router = APIRouter(prefix="/api/v1/scheduler", tags=["定时任务管理"])
 
 
 # 请求模型
-class ApiResponse(BaseModel):
-    """API响应模型"""
-    success: bool = True
-    message: str = "操作成功"
-    data: Optional[Any] = None
-    error: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.now)
 
 
 class CreateTaskRequest(BaseModel):
@@ -85,8 +78,7 @@ async def get_scheduler_status(
         running_tasks = [task for task in tasks if task['is_running']]
         active_tasks = [task for task in tasks if task['is_active']]
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message="获取调度器状态成功",
             data={
                 "is_running": service.is_running,
@@ -95,7 +87,7 @@ async def get_scheduler_status(
                 "running_tasks": len(running_tasks),
                 "tasks": tasks
             }
-        )
+        ).model_dump()
         
     except Exception as e:
         print(f"[ERROR] 获取调度器状态失败: {e}")
@@ -115,11 +107,10 @@ async def start_scheduler(
     try:
         await service.start()
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message="调度器启动成功",
             data={"status": "running"}
-        )
+        ).model_dump()
         
     except Exception as e:
         print(f"[ERROR] 启动调度器失败: {e}")
@@ -139,11 +130,10 @@ async def stop_scheduler(
     try:
         await service.stop()
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message="调度器停止成功",
             data={"status": "stopped"}
-        )
+        ).model_dump()
         
     except Exception as e:
         print(f"[ERROR] 停止调度器失败: {e}")
@@ -176,14 +166,13 @@ async def get_tasks(
         if is_active is not None:
             tasks = [task for task in tasks if task['is_active'] == is_active]
             
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message=f"获取任务列表成功，共{len(tasks)}个任务",
             data={
                 "total_count": len(tasks),
                 "tasks": tasks
             }
-        )
+        ).model_dump()
         
     except Exception as e:
         print(f"[ERROR] 获取任务列表失败: {e}")
@@ -214,7 +203,7 @@ async def get_task(
             success=True,
             message="获取任务详情成功",
             data=task_status
-        )
+        ).model_dump()
         
     except HTTPException:
         raise
@@ -247,7 +236,7 @@ async def run_task(
             success=True,
             message=f"任务{task_id}已开始执行",
             data={"task_id": task_id, "status": "running"}
-        )
+        ).model_dump()
         
     except HTTPException:
         raise
@@ -280,7 +269,7 @@ async def delete_task(
             success=True,
             message=f"任务{task_id}删除成功",
             data={"task_id": task_id}
-        )
+        ).model_dump()
         
     except HTTPException:
         raise
@@ -336,7 +325,7 @@ async def run_stock_selection(
                 "save_to_db": request.save_to_db,
                 "send_notification": request.send_notification
             }
-        )
+        ).model_dump()
         
     except HTTPException:
         raise
@@ -381,7 +370,7 @@ async def get_stock_selection_history(
                 "total_count": len(history),
                 "history": history[offset:offset+limit]
             }
-        )
+        ).model_dump()
         
     except Exception as e:
         print(f"[ERROR] 获取选股历史失败: {e}")

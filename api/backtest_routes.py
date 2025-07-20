@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field, validator
 from loguru import logger
 import json
 
+from models.api_response import ApiResponse
+
 from services.backtest_service import BacktestService, BacktestStatus
 
 # 创建路由器
@@ -141,11 +143,7 @@ class PerformanceMetrics(BaseModel):
     benchmark_value: Optional[float] = Field(None, description="基准价值")
 
 
-class ApiResponse(BaseModel):
-    """API响应基类"""
-    success: bool = Field(..., description="是否成功")
-    message: str = Field(..., description="响应消息")
-    data: Any = Field(None, description="响应数据")
+
 
 
 # API路由
@@ -168,11 +166,10 @@ async def create_backtest(
             max_position_size=request.max_position_size
         )
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message="创建回测任务成功",
             data={"backtest_id": backtest_id}
-        )
+        ).model_dump()
     
     except Exception as e:
         logger.error(f"创建回测任务失败: {e}")
@@ -190,11 +187,10 @@ async def start_backtest(
         # 异步启动回测
         background_tasks.add_task(_run_backtest_background, service, backtest_id)
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message="回测已启动",
             data={"backtest_id": backtest_id}
-        )
+        ).model_dump()
     
     except Exception as e:
         logger.error(f"启动回测失败: {e}")
@@ -236,7 +232,7 @@ async def get_backtests(
             success=True,
             message="获取回测列表成功",
             data=backtests
-        )
+        ).model_dump()
     
     except HTTPException:
         raise
@@ -260,7 +256,7 @@ async def get_backtest_status(
             success=True,
             message="获取回测状态成功",
             data=status_info
-        )
+        ).model_dump()
     
     except HTTPException:
         raise
@@ -284,7 +280,7 @@ async def get_backtest_result(
             success=True,
             message="获取回测结果成功",
             data=result
-        )
+        ).model_dump()
     
     except HTTPException:
         raise
@@ -443,7 +439,7 @@ async def stop_backtest(
                 success=True,
                 message="停止回测成功",
                 data={"backtest_id": backtest_id}
-            )
+            ).model_dump()
         else:
             raise HTTPException(status_code=500, detail="停止回测失败")
     
@@ -470,7 +466,7 @@ async def delete_backtest(
             success=True,
             message="删除回测成功",
             data={"backtest_id": backtest_id}
-        )
+        ).model_dump()
     
     except Exception as e:
         logger.error(f"删除回测失败: {e}")

@@ -6,6 +6,7 @@
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field, validator
+from models.api_response import ApiResponse
 from loguru import logger
 
 from config import SystemConfig, get_settings
@@ -96,11 +97,7 @@ class ConfigInfo(BaseModel):
     is_sensitive: bool = Field(..., description="是否敏感信息")
 
 
-class ApiResponse(BaseModel):
-    """API响应基类"""
-    success: bool = Field(..., description="是否成功")
-    message: str = Field(..., description="响应消息")
-    data: Any = Field(None, description="响应数据")
+
 
 
 # 辅助函数
@@ -294,18 +291,17 @@ async def get_all_configs(settings: SystemConfig = Depends(get_settings)):
                 "is_sensitive": False
             })
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message="获取所有配置成功",
             data=configs
-        )
+        ).model_dump()
     
     except Exception as e:
         logger.error(f"获取所有配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/section/{section}", response_model=ApiResponse, summary="获取指定节配置")
+@router.get("/section/{section}", summary="获取指定节配置")
 async def get_section_config(
     section: str,
     settings: SystemConfig = Depends(get_settings)
@@ -363,11 +359,10 @@ async def get_section_config(
                 "max_concurrent_backtests": settings.backtest.max_concurrent_backtests
             }
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message=f"获取{section}配置成功",
             data=config_data
-        )
+        ).model_dump()
     
     except HTTPException:
         raise
@@ -376,7 +371,7 @@ async def get_section_config(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/database", response_model=ApiResponse, summary="更新数据库配置")
+@router.post("/database", summary="更新数据库配置")
 async def update_database_config(
     request: DatabaseConfigRequest,
     settings: SystemConfig = Depends(get_settings)
@@ -406,11 +401,10 @@ async def update_database_config(
             settings.database.database = request.database
             updated_fields.append("database")
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message=f"更新数据库配置成功，更新字段: {', '.join(updated_fields)}",
             data={"updated_fields": updated_fields}
-        )
+        ).model_dump()
     
     except Exception as e:
         logger.error(f"更新数据库配置失败: {e}")
@@ -454,7 +448,7 @@ async def update_database_config(
 #         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/xtquant", response_model=ApiResponse, summary="更新XtQuant配置")
+@router.post("/xtquant", summary="更新XtQuant配置")
 async def update_xtquant_config(
     request: XtQuantConfigRequest,
     settings: SystemConfig = Depends(get_settings)
@@ -479,18 +473,17 @@ async def update_xtquant_config(
             settings.xtquant.account_type = request.account_type
             updated_fields.append("account_type")
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message=f"更新XtQuant配置成功，更新字段: {', '.join(updated_fields)}",
             data={"updated_fields": updated_fields}
-        )
+        ).model_dump()
     
     except Exception as e:
         logger.error(f"更新XtQuant配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/dingtalk", response_model=ApiResponse, summary="更新钉钉配置")
+@router.post("/dingtalk", summary="更新钉钉配置")
 async def update_dingtalk_config(
     request: DingTalkConfigRequest,
     settings: SystemConfig = Depends(get_settings)
@@ -511,18 +504,17 @@ async def update_dingtalk_config(
             settings.dingtalk.enabled = request.enabled
             updated_fields.append("enabled")
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message=f"更新钉钉配置成功，更新字段: {', '.join(updated_fields)}",
             data={"updated_fields": updated_fields}
-        )
+        ).model_dump()
     
     except Exception as e:
         logger.error(f"更新钉钉配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/trading", response_model=ApiResponse, summary="更新交易配置")
+@router.post("/trading", summary="更新交易配置")
 async def update_trading_config(
     request: TradingConfigRequest,
     settings: SystemConfig = Depends(get_settings)
@@ -559,18 +551,17 @@ async def update_trading_config(
             settings.trading.min_order_amount = request.min_order_amount
             updated_fields.append("min_order_amount")
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message=f"更新交易配置成功，更新字段: {', '.join(updated_fields)}",
             data={"updated_fields": updated_fields}
-        )
+        ).model_dump()
     
     except Exception as e:
         logger.error(f"更新交易配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/backtest", response_model=ApiResponse, summary="更新回测配置")
+@router.post("/backtest", summary="更新回测配置")
 async def update_backtest_config(
     request: BacktestConfigRequest,
     settings: SystemConfig = Depends(get_settings)
@@ -599,18 +590,17 @@ async def update_backtest_config(
             settings.backtest.max_concurrent_backtests = request.max_concurrent_backtests
             updated_fields.append("max_concurrent_backtests")
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message=f"更新回测配置成功，更新字段: {', '.join(updated_fields)}",
             data={"updated_fields": updated_fields}
-        )
+        ).model_dump()
     
     except Exception as e:
         logger.error(f"更新回测配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/system", response_model=ApiResponse, summary="更新系统配置")
+@router.post("/system", summary="更新系统配置")
 async def update_system_config(
     request: SystemConfigRequest
 ):
@@ -642,11 +632,10 @@ async def update_system_config(
         
         # 其他系统配置项的更新逻辑...
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message=f"更新系统配置成功，更新字段: {', '.join(updated_fields)}",
             data={"updated_fields": updated_fields, "restart_required": bool(updated_fields)}
-        )
+        ).model_dump()
     
     except Exception as e:
         logger.error(f"更新系统配置失败: {e}")

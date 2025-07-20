@@ -13,6 +13,7 @@ from config import get_settings
 from utils.log_config import get_logger
 from services.strategy_service import StrategyService, StrategyType, SignalType
 from api.dependencies import get_strategy_service
+from models.api_response import ApiResponse
 
 # 获取logger实例
 logger = get_logger(__name__)
@@ -23,13 +24,7 @@ router = APIRouter(prefix="/strategy", tags=["策略业务"])
 # 获取配置
 settings = get_settings()
 
-# 响应模型类
-class ApiResponse(BaseModel):
-    """API响应基类"""
-    success: bool = Field(..., description="是否成功")
-    message: str = Field(..., description="响应消息")
-    data: Any = Field(None, description="响应数据")
-    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat(), description="时间戳")
+
 
 class StrategyInfo(BaseModel):
     """策略信息"""
@@ -116,11 +111,7 @@ async def get_strategy_overview(service: StrategyService = Depends(get_strategy_
             "strategy_types": [strategy_type.value for strategy_type in StrategyType]
         }
         
-        return ApiResponse(
-            success=True,
-            message="获取策略概览成功",
-            data=overview
-        )
+        return ApiResponse.success_response(message="获取策略概览成功", data=overview).model_dump()
         
     except Exception as e:
         logger.error(f"获取策略概览失败: {e}, {traceback.format_exc()}")
@@ -157,11 +148,7 @@ async def get_strategy_list(
             }
         }
         
-        return ApiResponse(
-            success=True,
-            message="获取策略列表成功",
-            data=result
-        )
+        return ApiResponse.success_response(message="获取策略列表成功", data=result).model_dump()
         
     except Exception as e:
         logger.error(f"获取策略列表失败: {e}, {traceback.format_exc()}")
@@ -192,11 +179,7 @@ async def create_strategy(
         if not strategy_info:
             raise HTTPException(status_code=500, detail="无法获取创建的策略信息")
         
-        return ApiResponse(
-            success=True,
-            message="策略创建成功",
-            data=strategy_info
-        )
+        return ApiResponse.success_response(message="策略创建成功", data=strategy_info).model_dump()
         
     except Exception as e:
         logger.error(f"创建策略失败: {e}, {traceback.format_exc()}")
@@ -212,11 +195,7 @@ async def get_strategy_types(service: StrategyService = Depends(get_strategy_ser
             "description": f"{strategy_type.value}策略"
         } for strategy_type in StrategyType]
         
-        return ApiResponse(
-            success=True,
-            message="获取策略类型成功",
-            data=strategy_types
-        )
+        return ApiResponse.success_response(message="获取策略类型成功", data=strategy_types).model_dump()
     except Exception as e:
         logger.error(f"获取策略类型失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -230,11 +209,7 @@ async def get_available_strategies(service: StrategyService = Depends(get_strate
             "description": f"{name}策略实现"
         } for name in service.strategies.keys()]
         
-        return ApiResponse(
-            success=True,
-            message="获取可用策略成功",
-            data=available_strategies
-        )
+        return ApiResponse.success_response(message="获取可用策略成功", data=available_strategies).model_dump()
     except Exception as e:
         logger.error(f"获取可用策略失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -256,11 +231,7 @@ async def get_strategy_detail(
         # StrategyService已经返回字典格式，直接使用
         strategy_detail = strategy
         
-        return ApiResponse(
-            success=True,
-            message="获取策略详情成功",
-            data=strategy_detail
-        )
+        return ApiResponse.success_response(message="获取策略详情成功", data=strategy_detail).model_dump()
         
     except HTTPException:
         raise
@@ -276,11 +247,7 @@ async def activate_strategy(
     """激活策略"""
     try:
         await service.activate_strategy(strategy_id)
-        return ApiResponse(
-            success=True,
-            message="策略激活成功",
-            data={"strategy_id": strategy_id, "is_active": True}
-        )
+        return ApiResponse.success_response(message="策略激活成功", data={"strategy_id": strategy_id, "is_active": True}).model_dump()
     except Exception as e:
         logger.error(f"激活策略失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -293,11 +260,7 @@ async def deactivate_strategy(
     """停用策略"""
     try:
         await service.deactivate_strategy(strategy_id)
-        return ApiResponse(
-            success=True,
-            message="策略停用成功",
-            data={"strategy_id": strategy_id, "is_active": False}
-        )
+        return ApiResponse.success_response(message="策略停用成功", data={"strategy_id": strategy_id, "is_active": False}).model_dump()
     except Exception as e:
         logger.error(f"停用策略失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -317,11 +280,7 @@ async def run_strategy_scan(
             request.stock_codes
         )
         
-        return ApiResponse(
-            success=True,
-            message="策略扫描已启动",
-            data={"strategy_name": request.strategy_name, "status": "running"}
-        )
+        return ApiResponse.success_response(message="策略扫描已启动", data={"strategy_name": request.strategy_name, "status": "running"}).model_dump()
     except Exception as e:
         logger.error(f"运行策略扫描失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -336,11 +295,7 @@ async def run_all_active_strategies(
         # 在后台运行所有激活策略
         background_tasks.add_task(service.run_all_active_strategies)
         
-        return ApiResponse(
-            success=True,
-            message="所有激活策略已启动",
-            data={"status": "running"}
-        )
+        return ApiResponse.success_response(message="所有激活策略已启动", data={"status": "running"}).model_dump()
     except Exception as e:
         logger.error(f"运行所有激活策略失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -367,11 +322,7 @@ async def get_latest_signals(
             }
         ]
         
-        return ApiResponse(
-            success=True,
-            message="获取最新信号成功",
-            data=signals[:limit]
-        )
+        return ApiResponse.success_response(message="获取最新信号成功", data=signals[:limit]).model_dump()
     except Exception as e:
         logger.error(f"获取最新信号失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -397,11 +348,7 @@ async def get_strategy_signals(
             }
         ]
         
-        return ApiResponse(
-            success=True,
-            message="获取策略信号成功",
-            data=signals[:limit]
-        )
+        return ApiResponse.success_response(message="获取策略信号成功", data=signals[:limit]).model_dump()
     except Exception as e:
         logger.error(f"获取策略信号失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))

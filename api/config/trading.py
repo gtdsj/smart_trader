@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, Dict, Any
 
+from models.api_response import ApiResponse
+
 from config import get_settings
 
 # 创建交易配置路由器
@@ -17,21 +19,7 @@ router = APIRouter(prefix="/trading", tags=["交易配置"])
 # 获取配置
 settings = get_settings()
 
-# 响应模型类
-class ApiResponse:
-    def __init__(self, success=True, message="", data=None):
-        self.success = success
-        self.message = message
-        self.data = data
-        self.timestamp = datetime.now().isoformat()
 
-    def to_dict(self):
-        return {
-            "success": self.success,
-            "message": self.message,
-            "data": self.data,
-            "timestamp": self.timestamp
-        }
 
 # 请求模型
 class TradingConfigRequest(BaseModel):
@@ -83,10 +71,7 @@ def get_trading_config():
             })
         }
         
-        return ApiResponse(
-            message="获取交易配置成功",
-            data=config
-        ).to_dict()
+        return ApiResponse.success_response(message="获取交易配置成功", data=config).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -124,10 +109,7 @@ def update_trading_config(config_request: TradingConfigRequest):
             "updated_at": datetime.now().isoformat()
         }
         
-        return ApiResponse(
-            message="交易配置更新成功",
-            data=updated_config
-        ).to_dict()
+        return ApiResponse.success_response(message="交易配置更新成功", data=updated_config).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -149,10 +131,7 @@ def get_risk_control_config():
             }
         })
         
-        return ApiResponse(
-            message="获取风控配置成功",
-            data=risk_config
-        ).to_dict()
+        return ApiResponse.success_response(message="获取风控配置成功", data=risk_config).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -170,10 +149,7 @@ def update_risk_control_config(risk_request: RiskControlRequest):
             "updated_at": datetime.now().isoformat()
         }
         
-        return ApiResponse(
-            message="风控配置更新成功",
-            data=updated_risk_config
-        ).to_dict()
+        return ApiResponse.success_response(message="风控配置更新成功", data=updated_risk_config).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -190,10 +166,7 @@ def get_trading_status():
             "last_update": datetime.now().isoformat()
         }
         
-        return ApiResponse(
-            message="获取交易状态成功",
-            data=status
-        ).to_dict()
+        return ApiResponse.success_response(message="获取交易状态成功", data=status).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -217,10 +190,7 @@ def validate_trading_config():
         
         # 这里可以添加实际的配置验证逻辑
         
-        return ApiResponse(
-            message="交易配置验证完成",
-            data=validation_result
-        ).to_dict()
+        return ApiResponse.success_response(message="交易配置验证成功", data=validation_result).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

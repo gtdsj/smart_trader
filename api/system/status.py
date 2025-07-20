@@ -4,9 +4,12 @@
 提供系统运行状态和基本信息
 """
 import traceback
+from loguru import logger
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from typing import Dict, Any
+
+from models.api_response import ApiResponse
 
 from config import get_settings
 from core.local_cache import get_cache
@@ -18,21 +21,7 @@ router = APIRouter(prefix="/status", tags=["系统状态"])
 # 获取配置
 settings = get_settings()
 
-# 响应模型类
-class ApiResponse:
-    def __init__(self, success=True, message="", data=None):
-        self.success = success
-        self.message = message
-        self.data = data
-        self.timestamp = datetime.now().isoformat()
 
-    def to_dict(self):
-        return {
-            "success": self.success,
-            "message": self.message,
-            "data": self.data,
-            "timestamp": self.timestamp
-        }
 
 @router.get("/", summary="系统状态", description="获取系统整体运行状态")
 def get_system_status():
@@ -50,10 +39,7 @@ def get_system_status():
             "timestamp": datetime.now().isoformat()
         }
         
-        return ApiResponse(
-            message="系统运行正常",
-            data=status
-        ).to_dict()
+        return ApiResponse.success_response(message="系统运行正常", data=status).model_dump()
     except Exception as e:
         logger.error(f"获取系统状态失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -86,10 +72,7 @@ def get_system_info():
             "timestamp": datetime.now().isoformat()
         }
         
-        return ApiResponse(
-            message="获取系统信息成功",
-            data=info
-        ).to_dict()
+        return ApiResponse.success_response(message="获取系统信息成功", data=info).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -105,10 +88,7 @@ def get_version_info():
             "environment": "development" if settings.debug else "production"
         }
         
-        return ApiResponse(
-            message="获取版本信息成功",
-            data=version_info
-        ).to_dict()
+        return ApiResponse.success_response(message="获取版本信息成功", data=version_info).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -125,10 +105,7 @@ def get_uptime():
             "current_time": datetime.now().isoformat()
         }
         
-        return ApiResponse(
-            message="获取运行时间成功",
-            data=uptime_info
-        ).to_dict()
+        return ApiResponse.success_response(message="获取运行时间成功", data=uptime_info).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

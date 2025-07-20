@@ -11,6 +11,7 @@ from typing import Optional
 
 from config import get_settings
 from core.duckdb_adapter import get_duckdb
+from models.api_response import ApiResponse
 
 # 创建数据库配置路由器
 router = APIRouter(prefix="/database", tags=["数据库配置"])
@@ -18,21 +19,7 @@ router = APIRouter(prefix="/database", tags=["数据库配置"])
 # 获取配置
 settings = get_settings()
 
-# 响应模型类
-class ApiResponse:
-    def __init__(self, success=True, message="", data=None):
-        self.success = success
-        self.message = message
-        self.data = data
-        self.timestamp = datetime.now().isoformat()
 
-    def to_dict(self):
-        return {
-            "success": self.success,
-            "message": self.message,
-            "data": self.data,
-            "timestamp": self.timestamp
-        }
 
 # 请求模型
 class DatabaseConfigRequest(BaseModel):
@@ -54,10 +41,10 @@ def get_database_config():
             "config": getattr(settings.database, 'config', {})
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取数据库配置成功",
             data=config
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -78,10 +65,10 @@ def update_database_config(config_request: DatabaseConfigRequest):
             "updated_at": datetime.now().isoformat()
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="数据库配置更新成功",
             data=updated_config
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -107,10 +94,10 @@ def get_database_status():
                 "size": "N/A"  # 可以获取数据库大小
             })
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取数据库状态成功",
             data=status
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -141,10 +128,10 @@ def test_database_connection():
                 "tested_at": datetime.now().isoformat()
             }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="数据库连接测试完成",
             data=test_result
-        ).to_dict()
+        ).model_dump()
         
     except HTTPException:
         raise

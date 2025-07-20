@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field, validator
 
 from config import get_settings
+from models.api_response import ApiResponse
 
 # 创建配置路由器
 config_router = APIRouter(prefix="/api/config")
@@ -17,21 +18,7 @@ config_router = APIRouter(prefix="/api/config")
 # 获取配置
 settings = get_settings()
 
-# 响应模型类
-class ApiResponse:
-    def __init__(self, success=True, message="", data=None):
-        self.success = success
-        self.message = message
-        self.data = data
-        self.timestamp = datetime.now().isoformat()
 
-    def to_dict(self):
-        return {
-            "success": self.success,
-            "message": self.message,
-            "data": self.data,
-            "timestamp": self.timestamp
-        }
 
 # 请求模型
 class DatabaseConfigRequest(BaseModel):
@@ -90,10 +77,7 @@ def get_all_config():
             "timestamp": datetime.now().isoformat()
         }
         
-        return ApiResponse(
-            message="获取配置成功",
-            data=config_data
-        ).to_dict()
+        return ApiResponse.success_response(message="获取配置成功", data=config_data).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -108,10 +92,7 @@ def get_database_config():
             "url": settings.database.get_url()
         }
         
-        return ApiResponse(
-            message="获取数据库配置成功",
-            data=config_data
-        ).to_dict()
+        return ApiResponse.success_response(message="获取数据库配置成功", data=config_data).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -137,10 +118,7 @@ def update_database_config(request: DatabaseConfigRequest):
         if request.database is not None:
             updated_config["updated_fields"].append("database")
             
-        return ApiResponse(
-            message="数据库配置更新成功",
-            data=updated_config
-        ).to_dict()
+        return ApiResponse.success_response(message="数据库配置更新成功", data=updated_config).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -159,10 +137,7 @@ def get_trading_config():
             "max_orders_per_day": getattr(settings.trading, 'max_orders_per_day', None)
         }
         
-        return ApiResponse(
-            message="获取交易配置成功",
-            data=config_data
-        ).to_dict()
+        return ApiResponse.success_response(message="获取交易配置成功", data=config_data).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -182,10 +157,7 @@ def update_trading_config(request: TradingConfigRequest):
         if request.risk_level is not None:
             updated_fields.append("risk_level")
             
-        return ApiResponse(
-            message="交易配置更新成功",
-            data={"updated_fields": updated_fields}
-        ).to_dict()
+        return ApiResponse.success_response(message="交易配置更新成功", data={"updated_fields": updated_fields}).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -203,10 +175,7 @@ def get_xtquant_config():
             "connected": False  # 这个需要从服务状态获取
         }
         
-        return ApiResponse(
-            message="获取XtQuant配置成功",
-            data=config_data
-        ).to_dict()
+        return ApiResponse.success_response(message="获取XtQuant配置成功", data=config_data).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

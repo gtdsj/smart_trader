@@ -14,6 +14,7 @@ import traceback
 
 logger = logging.getLogger(__name__)
 
+from models.api_response import ApiResponse
 from config import get_settings
 from core.local_cache import get_cache
 from core.duckdb_adapter import get_duckdb
@@ -24,21 +25,7 @@ router = APIRouter(prefix="/monitoring", tags=["系统监控"])
 # 获取配置
 settings = get_settings()
 
-# 响应模型类
-class ApiResponse:
-    def __init__(self, success=True, message="", data=None):
-        self.success = success
-        self.message = message
-        self.data = data
-        self.timestamp = datetime.now().isoformat()
 
-    def to_dict(self):
-        return {
-            "success": self.success,
-            "message": self.message,
-            "data": self.data,
-            "timestamp": self.timestamp
-        }
 
 @router.get("/", summary="系统监控概览", description="获取系统监控概览信息")
 def get_monitoring_overview():
@@ -73,10 +60,10 @@ def get_monitoring_overview():
             "timestamp": datetime.now().isoformat()
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取监控概览成功",
             data=overview
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -103,10 +90,10 @@ def get_cache_monitoring():
             "timestamp": datetime.now().isoformat()
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取缓存监控信息成功",
             data=cache_info
-        ).to_dict()
+        ).model_dump()
         
     except HTTPException:
         raise
@@ -135,10 +122,10 @@ def get_database_monitoring():
             "timestamp": datetime.now().isoformat()
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取数据库监控信息成功",
             data=db_info
-        ).to_dict()
+        ).model_dump()
         
     except HTTPException:
         raise
@@ -171,10 +158,10 @@ def get_performance_metrics():
             "timestamp": datetime.now().isoformat()
         }
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="获取性能指标成功",
             data=performance
-        ).to_dict()
+        ).model_dump()
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -190,10 +177,10 @@ def clear_cache():
         
         cache.clear()
         
-        return ApiResponse(
+        return ApiResponse.success_response(
             message="缓存清空成功",
             data={"cleared_at": datetime.now().isoformat()}
-        ).to_dict()
+        ).model_dump()
         
     except HTTPException:
         raise

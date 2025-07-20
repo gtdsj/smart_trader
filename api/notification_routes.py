@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field, validator
 from loguru import logger
 
+from models.api_response import ApiResponse
 from services.notification_service import NotificationService, NotificationLevel
 
 # 创建路由器
@@ -136,11 +137,7 @@ class NotificationConfig(BaseModel):
     timeout: int = Field(..., description="超时时间（秒）")
 
 
-class ApiResponse(BaseModel):
-    """API响应基类"""
-    success: bool = Field(..., description="是否成功")
-    message: str = Field(..., description="响应消息")
-    data: Any = Field(None, description="响应数据")
+
 
 
 # API路由
@@ -160,11 +157,10 @@ async def get_notification_config(
             "timeout": 10
         }
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message="获取通知配置成功",
             data=config
-        )
+        ).model_dump()
     except Exception as e:
         logger.error(f"获取通知配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -189,11 +185,10 @@ async def update_notification_config(
         if request.enabled is not None:
             service.enabled = request.enabled
         
-        return ApiResponse(
-            success=True,
+        return ApiResponse.success_response(
             message="更新通知配置成功",
             data=None
-        )
+        ).model_dump()
     except Exception as e:
         logger.error(f"更新通知配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -247,7 +242,7 @@ async def send_notification(
                 success=True,
                 message="通知发送成功",
                 data=None
-            )
+            ).model_dump()
         else:
             return ApiResponse(
                 success=False,
