@@ -193,8 +193,8 @@ class FeishuBotService:
         except Exception as e:
             logger.error(f"停止飞书机器人失败: {e}, {traceback.format_exc()}")
     
-    def _handle_message(self, data: P2ImMessageReceiveV1) -> None:
-        """处理接收到的消息"""
+    def _process_message_in_thread(self, data: P2ImMessageReceiveV1) -> None:
+        """在单独的线程中处理接收到的消息"""
         try:
             # 解析消息内容
             message_content = ""
@@ -215,6 +215,12 @@ class FeishuBotService:
         except Exception as e:
             logger.error(f"处理飞书消息失败: {e}, {traceback.format_exc()}")
             self._send_response(data, f"处理消息时发生错误: {str(e)}")
+
+    def _handle_message(self, data: P2ImMessageReceiveV1) -> None:
+        """处理接收到的消息，将其放入新线程中执行以避免阻塞"""
+        thread = threading.Thread(target=self._process_message_in_thread, args=(data,))
+        thread.daemon = True
+        thread.start()
     
     def _process_message(self, message: str) -> str:
         """处理消息并生成响应
