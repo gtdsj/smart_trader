@@ -3,7 +3,7 @@
 from services.data_service import DataService
 from services.optimized_backfill_service import OptimizedBackfillService
 from services.trading_service import TradingService
-from services.strategy_service import StrategyService
+from services.strategy_manager import StrategyManager
 from services.notification_service import NotificationService
 from services.backtest_service import BacktestService
 from services.scheduler_service import SchedulerService
@@ -24,9 +24,9 @@ def get_trading_service() -> TradingService:
     return TradingService()
 
 
-def get_strategy_service() -> StrategyService:
-    """获取策略服务实例"""
-    return StrategyService()
+def get_strategy_manager() -> StrategyManager:
+    """获取策略管理器实例（单例）"""
+    return StrategyManager.get_instance()
 
 
 def get_notification_service() -> NotificationService:

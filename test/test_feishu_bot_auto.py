@@ -24,12 +24,12 @@ async def test_feishu_bot_service():
     
     try:
         # 创建模拟的服务依赖
-        mock_strategy_service = Mock()
+        mock_strategy_manager = Mock()
         mock_stock_screener = Mock()
         mock_data_service = Mock()
         
-        # 创建模拟策略服务类
-        class MockStrategyService:
+        # 创建模拟策略管理器类
+        class MockStrategyManager:
             def __init__(self):
                 self.strategies = {
             "趋势跟踪策略": {
@@ -130,7 +130,7 @@ async def test_feishu_bot_service():
                 }
         
         # 创建模拟服务实例
-        mock_strategy_service = MockStrategyService()
+        mock_strategy_manager = MockStrategyManager()
         mock_stock_screener = MockStockScreener()
         
         # 使用模拟的飞书客户端
@@ -144,7 +144,7 @@ async def test_feishu_bot_service():
             )
             
             # 设置依赖服务
-            bot_service.set_strategy_service(mock_strategy_service)
+            bot_service.set_strategy_manager(mock_strategy_manager)
             bot_service.set_stock_screener(mock_stock_screener)
             bot_service.set_data_service(mock_data_service)
             

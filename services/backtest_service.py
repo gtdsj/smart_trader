@@ -19,7 +19,7 @@ from core.database import get_db, BacktestResult, Strategy
 from core.cache_adapter import get_cache_client
 from services.notification_service import NotificationService
 from services.data_service import DataService
-from services.strategy_service import StrategyService, SignalType
+from services.strategy_manager import StrategyManager, SignalType
 
 
 class BacktestStatus(Enum):
@@ -265,7 +265,7 @@ class BacktestService:
         self.cache_client = get_cache_client()
         self.notification_service = NotificationService()
         self.data_service = None  # 延迟初始化
-        self.strategy_service = None  # 延迟初始化
+        self.strategy_manager = None  # 延迟初始化
         
         # 回测任务队列
         self.running_backtests: Dict[str, Dict[str, Any]] = {}
@@ -274,9 +274,9 @@ class BacktestService:
         """设置数据服务"""
         self.data_service = data_service
     
-    def set_strategy_service(self, strategy_service: StrategyService):
-        """设置策略服务"""
-        self.strategy_service = strategy_service
+    def set_strategy_manager(self, strategy_manager: StrategyManager):
+        """设置策略管理器"""
+        self.strategy_manager = strategy_manager
     
     async def create_backtest(self, name: str, description: str, 
                             strategy_name: str, start_date: str, end_date: str,
@@ -489,9 +489,9 @@ class BacktestService:
                 current_prices = await self._get_daily_prices(stock_pool, current_date)
                 
                 # 运行策略信号
-                if self.strategy_service:
-                    signals = await self._get_strategy_signals(
-                        config["strategy_name"], stock_pool, current_date
+                if self.strategy_manager:
+                    signals = self.strategy_manager.run_strategy_scan(
+                        strategy_name=config["strategy_name"], stock_codes=stock_pool, current_date=current_date
                     )
                     
                     # 执行交易信号

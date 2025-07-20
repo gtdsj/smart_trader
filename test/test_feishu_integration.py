@@ -76,10 +76,10 @@ async def test_feishu_integration():
         
         # 测试服务初始化
         logger.info("🔧 测试服务初始化...")
-        if feishu_service.strategy_service is None:
-            logger.warning("⚠️ 策略服务未初始化")
+        if feishu_service.strategy_manager is None:
+            logger.warning("⚠️ 策略管理器未初始化")
         else:
-            logger.info("✅ 策略服务初始化成功")
+            logger.info("✅ 策略管理器初始化成功")
         
         if feishu_service.stock_screener is None:
             logger.warning("⚠️ 股票筛选服务未初始化")

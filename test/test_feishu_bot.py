@@ -32,21 +32,15 @@ class TestFeishuBotService(unittest.TestCase):
         self.app_secret = "test_app_secret"
         
         # 创建模拟的服务依赖
-        self.mock_strategy_service = Mock()
+        self.mock_strategy_manager = Mock()
         self.mock_stock_screener = Mock()
         self.mock_data_service = Mock()
         
-        # 模拟策略服务返回数据
-        self.mock_strategy_service.strategies = {
-            "趋势跟踪策略": Mock(),
-            "均值回归策略": Mock(),
-            "动量策略": Mock()
-        }
-        
-        self.mock_strategy_service.get_strategies = AsyncMock(return_value=[
-            {"id": 1, "name": "趋势跟踪策略", "description": "基于趋势的交易策略"},
-            {"id": 2, "name": "均值回归策略", "description": "基于均值回归的交易策略"},
-            {"id": 3, "name": "动量策略", "description": "基于动量的交易策略"}
+        # 模拟策略管理器返回数据
+        self.mock_strategy_manager.get_strategies = Mock(return_value=[
+            {"id": "1", "name": "趋势跟踪策略", "description": "基于趋势的交易策略"},
+            {"id": "2", "name": "均值回归策略", "description": "基于均值回归的交易策略"},
+            {"id": "3", "name": "动量策略", "description": "基于动量的交易策略"}
         ])
         
         # 模拟股票筛选服务返回数据
@@ -81,7 +75,7 @@ class TestFeishuBotService(unittest.TestCase):
             )
             
             # 设置依赖服务
-            bot_service.set_strategy_service(self.mock_strategy_service)
+            bot_service.set_strategy_manager(self.mock_strategy_manager)
             bot_service.set_stock_screener(self.mock_stock_screener)
             bot_service.set_data_service(self.mock_data_service)
             
@@ -108,7 +102,7 @@ class TestFeishuBotService(unittest.TestCase):
                 )
                 
                 # 设置依赖服务
-                bot_service.set_strategy_service(self.mock_strategy_service)
+                bot_service.set_strategy_manager(self.mock_strategy_manager)
                 bot_service.set_stock_screener(self.mock_stock_screener)
                 bot_service.set_data_service(self.mock_data_service)
                 
@@ -142,7 +136,7 @@ class TestFeishuBotService(unittest.TestCase):
                 )
                 
                 # 设置依赖服务
-                bot_service.set_strategy_service(self.mock_strategy_service)
+                bot_service.set_strategy_manager(self.mock_strategy_manager)
                 bot_service.set_stock_screener(self.mock_stock_screener)
                 bot_service.set_data_service(self.mock_data_service)
                 
@@ -175,7 +169,7 @@ class TestFeishuBotService(unittest.TestCase):
                 )
                 
                 # 设置依赖服务
-                bot_service.set_strategy_service(self.mock_strategy_service)
+                bot_service.set_strategy_manager(self.mock_strategy_manager)
                 bot_service.set_stock_screener(self.mock_stock_screener)
                 bot_service.set_data_service(self.mock_data_service)
                 
@@ -208,7 +202,7 @@ class TestFeishuBotService(unittest.TestCase):
                 )
                 
                 # 设置依赖服务
-                bot_service.set_strategy_service(self.mock_strategy_service)
+                bot_service.set_strategy_manager(self.mock_strategy_manager)
                 bot_service.set_stock_screener(self.mock_stock_screener)
                 bot_service.set_data_service(self.mock_data_service)
                 
@@ -235,19 +229,14 @@ def run_manual_test():
     async def manual_test():
         try:
             # 创建模拟服务
-            mock_strategy_service = Mock()
+            mock_strategy_manager = Mock()
             mock_stock_screener = Mock()
             mock_data_service = Mock()
             
             # 模拟数据
-            mock_strategy_service.strategies = {
-                "趋势跟踪策略": Mock(),
-                "均值回归策略": Mock()
-            }
-            
-            mock_strategy_service.get_strategies = AsyncMock(return_value=[
-                {"id": 1, "name": "趋势跟踪策略", "description": "基于趋势的交易策略"},
-                {"id": 2, "name": "均值回归策略", "description": "基于均值回归的交易策略"}
+            mock_strategy_manager.get_strategies = Mock(return_value=[
+                {"id": "1", "name": "趋势跟踪策略", "description": "基于趋势的交易策略"},
+                {"id": "2", "name": "均值回归策略", "description": "基于均值回归的交易策略"}
             ])
             
             mock_stock_screener.screen_stocks_by_strategy = AsyncMock(return_value={
@@ -272,7 +261,7 @@ def run_manual_test():
                 )
                 
                 # 设置依赖服务
-                bot_service.set_strategy_service(mock_strategy_service)
+                bot_service.set_strategy_manager(mock_strategy_manager)
                 bot_service.set_stock_screener(mock_stock_screener)
                 bot_service.set_data_service(mock_data_service)
                 

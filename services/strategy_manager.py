@@ -91,6 +91,13 @@ class StrategyManager:
                     cls._instance = super().__new__(cls)
         return cls._instance
 
+    @classmethod
+    def get_instance(cls):
+        """获取单例实例"""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
     def __init__(self):
         self.settings = get_settings()
         self.cache_client = get_cache_client()
@@ -729,3 +736,33 @@ class StrategyManager:
         ]
         
         return templates
+
+    async def run_strategy_scan(self, strategy_id: int) -> Dict[str, Any]:
+        """运行单个策略扫描"""
+        logger.info(f"开始扫描策略: {strategy_id}")
+        # TODO: 实现完整的策略扫描逻辑
+        # 1. 获取策略详情
+        # 2. 获取所需数据
+        # 3. 调用 StrategyExecutor 执行策略
+        # 4. 保存信号
+        return {"success": True, "message": f"策略 {strategy_id} 扫描任务已启动"}
+
+    async def run_all_active_strategies(self) -> Dict[str, Any]:
+        """运行所有激活的策略"""
+        logger.info("开始扫描所有激活的策略")
+        # TODO: 实现运行所有激活策略的逻辑
+        # 1. 获取所有激活的策略
+        # 2. 遍历并为每个策略启动扫描任务
+        return {"success": True, "message": "所有激活的策略扫描任务已启动"}
+
+    async def get_latest_signals(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """获取最新的信号"""
+        logger.info(f"获取最新的 {limit} 条信号")
+        # TODO: 从数据库中查询最新的信号
+        return []
+
+    async def get_strategy_signals(self, strategy_id: int, limit: int = 100) -> List[Dict[str, Any]]:
+        """获取指定策略的信号"""
+        logger.info(f"获取策略 {strategy_id} 的最新的 {limit} 条信号")
+        # TODO: 从数据库中查询指定策略的信号
+        return []

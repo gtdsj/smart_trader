@@ -60,7 +60,7 @@ from api.routes import router as main_api_router
 from services.notification_service import NotificationService
 from services.data_service import DataService
 from services.trading_service import TradingService
-from services.strategy_service import StrategyService
+
 from services.backtest_service import BacktestService
 from services.xtquant_service import XtQuantService
 from services.strategy_manager import StrategyManager
@@ -105,9 +105,7 @@ async def lifespan(app: FastAPI):
         await data_service.start()
         logger.info("数据服务初始化完成")
         
-        logger.info("开始初始化策略服务...")
-        strategy_service = StrategyService()
-        logger.info("策略服务初始化完成")
+
         
         # 初始化回测服务
         logger.info("开始初始化回测服务...")
@@ -164,14 +162,14 @@ async def lifespan(app: FastAPI):
         
         # 设置服务间依赖关系
         backtest_service.set_data_service(data_service)
-        backtest_service.set_strategy_service(strategy_service)
+        backtest_service.set_strategy_manager(strategy_manager)
         
         # 服务实例已通过新的API路由系统自动管理
         
         # 保存服务实例到app.state以便在关闭时使用
         app.state.scheduler_service = scheduler_service
         app.state.backtest_service = backtest_service
-        app.state.strategy_service = strategy_service
+
         app.state.data_service = data_service
         app.state.trading_service = trading_service
         app.state.notification_service = notification_service
@@ -220,13 +218,7 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.error(f"停止回测服务失败: {e}")
         
-        if hasattr(app.state, 'strategy_service'):
-            try:
-                await app.state.strategy_service.stop()
-                logger.info("策略服务已停止")
-            except Exception as e:
-                logger.error(f"停止策略服务失败: {e}")
-        
+
         if hasattr(app.state, 'trading_service'):
             try:
                 await app.state.trading_service.stop()

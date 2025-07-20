@@ -26,12 +26,12 @@ def test_bot_initialization():
         
         # Mock所有依赖的服务
         with patch('services.data_service.DataService') as mock_data_service, \
-             patch('services.strategy_service.StrategyService') as mock_strategy_service, \
+             patch('services.strategy_manager.StrategyManager') as mock_strategy_manager, \
              patch('services.stock_screener.StockScreener') as mock_stock_screener:
             
             # 设置mock返回值
             mock_data_service.get_instance.return_value = Mock()
-            mock_strategy_service.return_value = Mock()
+            mock_strategy_manager.return_value = Mock()
             mock_stock_screener.return_value = Mock()
             
             # 导入FeishuBotService
@@ -48,7 +48,7 @@ def test_bot_initialization():
             assert bot_service.app_id == "test_app_id", "App ID设置错误"
             assert bot_service.app_secret == "test_app_secret", "App Secret设置错误"
             assert hasattr(bot_service, 'data_service'), "数据服务未初始化"
-            assert hasattr(bot_service, 'strategy_service'), "策略服务未初始化"
+            assert hasattr(bot_service, 'strategy_manager'), "策略管理器未初始化"
             assert hasattr(bot_service, 'stock_screener'), "股票筛选器未初始化"
             
             logger.info("✅ 飞书机器人初始化测试通过")
@@ -66,17 +66,17 @@ def test_message_processing():
         
         # Mock所有依赖的服务
         with patch('services.data_service.DataService') as mock_data_service, \
-             patch('services.strategy_service.StrategyService') as mock_strategy_service, \
+             patch('services.strategy_manager.StrategyManager') as mock_strategy_manager, \
              patch('services.stock_screener.StockScreener') as mock_stock_screener:
             
             # 设置mock返回值
             mock_data_service.get_instance.return_value = Mock()
-            mock_strategy_service_instance = Mock()
-            mock_strategy_service.return_value = mock_strategy_service_instance
+            mock_strategy_manager_instance = Mock()
+            mock_strategy_manager.return_value = mock_strategy_manager_instance
             mock_stock_screener.return_value = Mock()
             
-            # 模拟策略服务返回数据
-            mock_strategy_service_instance.get_strategies.return_value = [
+            # 模拟策略管理器返回数据
+            mock_strategy_manager_instance.get_strategies.return_value = [
                 {"id": "1", "name": "测试策略1", "description": "这是一个测试策略"}
             ]
             
@@ -119,12 +119,12 @@ def test_bot_lifecycle():
         
         # Mock所有依赖的服务
         with patch('services.data_service.DataService') as mock_data_service, \
-             patch('services.strategy_service.StrategyService') as mock_strategy_service, \
+             patch('services.strategy_manager.StrategyManager') as mock_strategy_manager, \
              patch('services.stock_screener.StockScreener') as mock_stock_screener:
             
             # 设置mock返回值
             mock_data_service.get_instance.return_value = Mock()
-            mock_strategy_service.return_value = Mock()
+            mock_strategy_manager.return_value = Mock()
             mock_stock_screener.return_value = Mock()
             
             # 导入FeishuBotService

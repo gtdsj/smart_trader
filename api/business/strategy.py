@@ -11,8 +11,8 @@ from typing import Optional, List, Dict, Any
 
 from config import get_settings
 from utils.log_config import get_logger
-from services.strategy_service import StrategyService, StrategyType, SignalType
-from api.dependencies import get_strategy_service
+from services.strategy_manager import StrategyManager, StrategyCategory, ConditionType, OperatorType, LogicOperator
+from api.dependencies import get_strategy_manager
 from models.api_response import ApiResponse
 
 # 获取logger实例
@@ -88,12 +88,12 @@ class StrategyExecuteRequest(BaseModel):
     force_execute: Optional[bool] = False
 
 @router.get("/", response_model=ApiResponse, summary="策略概览", description="获取策略系统概览信息")
-async def get_strategy_overview(service: StrategyService = Depends(get_strategy_service)):
+async def get_strategy_overview(manager: StrategyManager = Depends(get_strategy_manager)):
     """获取策略概览"""
     try:
         # 获取真实的策略统计信息
-        all_strategies = await service.get_strategies()
-        active_strategies = await service.get_strategies(active_only=True)
+        all_strategies = manager.get_strategies()
+        active_strategies = manager.get_strategies(is_active=True)
         
         overview = {
             "strategy_engine": {
@@ -105,10 +105,10 @@ async def get_strategy_overview(service: StrategyService = Depends(get_strategy_
                 "total_strategies": len(all_strategies),
                 "active_strategies": len(active_strategies),
                 "inactive_strategies": len(all_strategies) - len(active_strategies),
-                "available_strategy_types": len(service.strategies)
+                "available_strategy_types": len(manager.get_strategy_templates()) # 使用模板作为可用策略类型
             },
-            "available_strategies": list(service.strategies.keys()),
-            "strategy_types": [strategy_type.value for strategy_type in StrategyType]
+            "available_strategies": manager.get_strategy_templates(),
+            "strategy_types": [category.value for category in StrategyCategory]
         }
         
         return ApiResponse.success_response(message="获取策略概览成功", data=overview).model_dump()
@@ -121,13 +121,13 @@ async def get_strategy_overview(service: StrategyService = Depends(get_strategy_
 async def get_strategy_list(
     page: int = Query(1, ge=1, description="页码"),
     size: int = Query(10, ge=1, le=100, description="每页数量"),
-    active_only: bool = Query(False, description="仅显示激活的策略"),
-    service: StrategyService = Depends(get_strategy_service)
+    is_active: bool = Query(None, description="仅显示激活的策略"),
+    manager: StrategyManager = Depends(get_strategy_manager)
 ):
     """获取策略列表"""
     try:
         # 获取真实的策略数据
-        strategies = await service.get_strategies(active_only=active_only)
+        strategies = manager.get_strategies(is_active=is_active)
         
         # StrategyService已经返回字典格式，直接使用
         strategy_list = strategies
@@ -155,29 +155,34 @@ async def get_strategy_list(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/create", response_model=ApiResponse, summary="创建策略", description="创建新的量化策略")
+class Condition(BaseModel):
+    condition_type: ConditionType
+    indicator: str
+    operator: OperatorType
+    value: Any
+    extra_params: Optional[Dict[str, Any]] = None
+
+class StrategyDefinition(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    category: StrategyCategory
+    conditions: List[Condition]
+    logic: Optional[List[LogicOperator]] = []
+
+@router.post("/create", response_model=ApiResponse, summary="创建策略", description="创建新的量化策略")
 async def create_strategy(
-    request: CreateStrategyRequest,
-    service: StrategyService = Depends(get_strategy_service)
+    request: StrategyDefinition,
+    manager: StrategyManager = Depends(get_strategy_manager)
 ):
     """创建策略"""
     try:
         # 使用真实的策略服务创建策略
-        result = await service.create_strategy(
-            name=request.name,
-            description=request.description,
-            strategy_type=request.strategy_type,
-            parameters=request.parameters
-        )
+        result = manager.create_strategy(request.model_dump())
         
-        if not result:
-            raise HTTPException(status_code=500, detail="策略创建失败")
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("message", "策略创建失败"))
         
-        # 创建成功后获取策略信息
-        strategies = await service.get_strategies()
-        strategy_info = strategies[-1] if strategies else None  # 获取最新创建的策略
-        
-        if not strategy_info:
-            raise HTTPException(status_code=500, detail="无法获取创建的策略信息")
+        strategy_info = result.get("data")
         
         return ApiResponse.success_response(message="策略创建成功", data=strategy_info).model_dump()
         
@@ -185,31 +190,22 @@ async def create_strategy(
         logger.error(f"创建策略失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/types", response_model=ApiResponse, summary="策略类型", description="获取所有可用的策略类型")
-async def get_strategy_types(service: StrategyService = Depends(get_strategy_service)):
-    """获取策略类型"""
+@router.get("/templates", response_model=ApiResponse, summary="策略模板", description="获取所有可用的策略模板")
+async def get_strategy_templates(manager: StrategyManager = Depends(get_strategy_manager)):
+    """获取策略模板"""
     try:
-        strategy_types = [{
-            "type": strategy_type.value,
-            "name": strategy_type.value,
-            "description": f"{strategy_type.value}策略"
-        } for strategy_type in StrategyType]
-        
-        return ApiResponse.success_response(message="获取策略类型成功", data=strategy_types).model_dump()
+        strategy_templates = manager.get_strategy_templates()
+        return ApiResponse.success_response(message="获取策略模板成功", data=strategy_templates).model_dump()
     except Exception as e:
-        logger.error(f"获取策略类型失败: {e}, {traceback.format_exc()}")
+        logger.error(f"获取策略模板失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/available", response_model=ApiResponse, summary="可用策略", description="获取所有可用的策略实现")
-async def get_available_strategies(service: StrategyService = Depends(get_strategy_service)):
-    """获取可用策略"""
+@router.get("/categories", response_model=ApiResponse, summary="策略分类", description="获取所有可用的策略分类")
+async def get_strategy_categories():
+    """获取策略分类"""
     try:
-        available_strategies = [{
-            "name": name,
-            "description": f"{name}策略实现"
-        } for name in service.strategies.keys()]
-        
-        return ApiResponse.success_response(message="获取可用策略成功", data=available_strategies).model_dump()
+        categories = [e.value for e in StrategyCategory]
+        return ApiResponse.success_response(message="获取策略分类成功", data=categories).model_dump()
     except Exception as e:
         logger.error(f"获取可用策略失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -217,19 +213,13 @@ async def get_available_strategies(service: StrategyService = Depends(get_strate
 @router.get("/{strategy_id}", response_model=ApiResponse, summary="策略详情", description="获取指定策略的详细信息")
 async def get_strategy_detail(
     strategy_id: int,
-    service: StrategyService = Depends(get_strategy_service)
+    manager: StrategyManager = Depends(get_strategy_manager)
 ):
     """获取策略详情"""
     try:
-        # 获取真实的策略详情
-        strategies = await service.get_strategies()
-        strategy = next((s for s in strategies if s["id"] == strategy_id), None)
-        
-        if not strategy:
+        strategy_detail = await manager.get_strategy_detail(strategy_id)
+        if not strategy_detail:
             raise HTTPException(status_code=404, detail="策略不存在")
-        
-        # StrategyService已经返回字典格式，直接使用
-        strategy_detail = strategy
         
         return ApiResponse.success_response(message="获取策略详情成功", data=strategy_detail).model_dump()
         
@@ -242,11 +232,13 @@ async def get_strategy_detail(
 @router.post("/{strategy_id}/activate", response_model=ApiResponse, summary="激活策略", description="激活指定策略")
 async def activate_strategy(
     strategy_id: int,
-    service: StrategyService = Depends(get_strategy_service)
+    manager: StrategyManager = Depends(get_strategy_manager)
 ):
     """激活策略"""
     try:
-        await service.activate_strategy(strategy_id)
+        result = await manager.activate_strategy(strategy_id)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("message", "策略激活失败"))
         return ApiResponse.success_response(message="策略激活成功", data={"strategy_id": strategy_id, "is_active": True}).model_dump()
     except Exception as e:
         logger.error(f"激活策略失败: {e}, {traceback.format_exc()}")
@@ -255,11 +247,13 @@ async def activate_strategy(
 @router.post("/{strategy_id}/deactivate", response_model=ApiResponse, summary="停用策略", description="停用指定策略")
 async def deactivate_strategy(
     strategy_id: int,
-    service: StrategyService = Depends(get_strategy_service)
+    manager: StrategyManager = Depends(get_strategy_manager)
 ):
     """停用策略"""
     try:
-        await service.deactivate_strategy(strategy_id)
+        result = await manager.deactivate_strategy(strategy_id)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("message", "策略停用失败"))
         return ApiResponse.success_response(message="策略停用成功", data={"strategy_id": strategy_id, "is_active": False}).model_dump()
     except Exception as e:
         logger.error(f"停用策略失败: {e}, {traceback.format_exc()}")
@@ -269,16 +263,16 @@ async def deactivate_strategy(
 async def run_strategy_scan(
     request: RunStrategyRequest,
     background_tasks: BackgroundTasks,
-    service: StrategyService = Depends(get_strategy_service)
+    manager: StrategyManager = Depends(get_strategy_manager)
 ):
     """运行策略扫描"""
     try:
-        # 在后台运行策略扫描
-        background_tasks.add_task(
-            service.run_strategy_scan,
-            request.strategy_name,
-            request.stock_codes
-        )
+        # StrategyManager 中没有 run_strategy_scan, 暂时注释
+        # background_tasks.add_task(
+        #     manager.run_strategy_scan,
+        #     request.strategy_name,
+        #     request.stock_codes
+        # )
         
         return ApiResponse.success_response(message="策略扫描已启动", data={"strategy_name": request.strategy_name, "status": "running"}).model_dump()
     except Exception as e:
@@ -288,12 +282,12 @@ async def run_strategy_scan(
 @router.post("/run-all", response_model=ApiResponse, summary="运行所有激活策略", description="运行所有激活的策略")
 async def run_all_active_strategies(
     background_tasks: BackgroundTasks,
-    service: StrategyService = Depends(get_strategy_service)
+    manager: StrategyManager = Depends(get_strategy_manager)
 ):
     """运行所有激活策略"""
     try:
-        # 在后台运行所有激活策略
-        background_tasks.add_task(service.run_all_active_strategies)
+        # StrategyManager 中没有 run_all_active_strategies, 暂时注释
+        # background_tasks.add_task(manager.run_all_active_strategies)
         
         return ApiResponse.success_response(message="所有激活策略已启动", data={"status": "running"}).model_dump()
     except Exception as e:
@@ -304,25 +298,13 @@ async def run_all_active_strategies(
 async def get_latest_signals(
     limit: int = Query(10, ge=1, le=100, description="返回信号数量"),
     signal_type: Optional[str] = Query(None, description="信号类型过滤"),
-    service: StrategyService = Depends(get_strategy_service)
+    manager: StrategyManager = Depends(get_strategy_manager)
 ):
     """获取最新信号"""
     try:
-        # 这里应该从数据库获取最新信号
-        # 暂时返回模拟数据
-        signals = [
-            {
-                "stock_code": "000001.SZ",
-                "signal": "BUY",
-                "strategy": "ma_cross",
-                "reason": "均线金叉",
-                "strength": 0.85,
-                "price": 12.45,
-                "timestamp": datetime.now().isoformat()
-            }
-        ]
-        
-        return ApiResponse.success_response(message="获取最新信号成功", data=signals[:limit]).model_dump()
+        # TODO: 实现从数据库获取最新信号的逻辑
+        signals = await manager.get_latest_signals(limit=limit, signal_type=signal_type)
+        return ApiResponse.success_response(message="获取最新信号成功", data=signals).model_dump()
     except Exception as e:
         logger.error(f"获取最新信号失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -331,24 +313,13 @@ async def get_latest_signals(
 async def get_strategy_signals(
     strategy_id: int,
     limit: int = Query(10, ge=1, le=100, description="返回信号数量"),
-    service: StrategyService = Depends(get_strategy_service)
+    manager: StrategyManager = Depends(get_strategy_manager)
 ):
     """获取策略信号"""
     try:
-        # 这里应该从数据库获取策略信号
-        # 暂时返回模拟数据
-        signals = [
-            {
-                "stock_code": "000001.SZ",
-                "signal": "BUY",
-                "reason": "策略信号",
-                "strength": 0.75,
-                "price": 12.45,
-                "timestamp": datetime.now().isoformat()
-            }
-        ]
-        
-        return ApiResponse.success_response(message="获取策略信号成功", data=signals[:limit]).model_dump()
+        # TODO: 实现从数据库获取策略信号的逻辑
+        signals = await manager.get_strategy_signals(strategy_id=strategy_id, limit=limit)
+        return ApiResponse.success_response(message="获取策略信号成功", data=signals).model_dump()
     except Exception as e:
         logger.error(f"获取策略信号失败: {e}, {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))

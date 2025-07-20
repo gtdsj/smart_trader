@@ -53,7 +53,7 @@ class TestMainAsyncIntegration:
              patch('main.NotificationService') as mock_notification_service, \
              patch('main.XtQuantService') as mock_xtquant_service, \
              patch('main.BacktestService') as mock_backtest_service, \
-             patch('main.StrategyService') as mock_strategy_service, \
+
              patch('main.SchedulerService') as mock_scheduler_service, \
              patch('main.StrategyManager') as mock_strategy_manager, \
              patch('main.StrategyExecutor') as mock_strategy_executor, \
@@ -82,7 +82,7 @@ class TestMainAsyncIntegration:
                 'notification_service': mock_notification_service.return_value,
                 'xtquant_service': mock_xtquant_service.return_value,
                 'backtest_service': mock_backtest_service.return_value,
-                'strategy_service': mock_strategy_service.return_value,
+
                 'scheduler_service': mock_scheduler_service.return_value,
                 'strategy_manager': mock_strategy_manager.return_value,
                 'strategy_executor': mock_strategy_executor.return_value,
@@ -99,7 +99,7 @@ class TestMainAsyncIntegration:
                     service.stop = AsyncMock()
                 service.set_data_service = Mock()
                 service.set_strategy_manager = Mock()
-                service.set_strategy_service = Mock()
+
             
             # 导入并测试lifespan
             from main import lifespan, FastAPI
@@ -149,7 +149,7 @@ class TestMainAsyncIntegration:
              patch('main.NotificationService') as mock_notification_service, \
              patch('main.XtQuantService') as mock_xtquant_service, \
              patch('main.BacktestService') as mock_backtest_service, \
-             patch('main.StrategyService') as mock_strategy_service, \
+
              patch('main.SchedulerService') as mock_scheduler_service, \
              patch('main.StrategyManager') as mock_strategy_manager, \
              patch('main.StrategyExecutor') as mock_strategy_executor, \
@@ -165,7 +165,7 @@ class TestMainAsyncIntegration:
                 'notification_service': mock_notification_service.return_value,
                 'xtquant_service': mock_xtquant_service.return_value,
                 'backtest_service': mock_backtest_service.return_value,
-                'strategy_service': mock_strategy_service.return_value,
+
                 'scheduler_service': mock_scheduler_service.return_value,
                 'strategy_manager': mock_strategy_manager.return_value,
                 'strategy_executor': mock_strategy_executor.return_value,
@@ -182,7 +182,7 @@ class TestMainAsyncIntegration:
                     service.stop = AsyncMock()
                 service.set_data_service = Mock()
                 service.set_strategy_manager = Mock()
-                service.set_strategy_service = Mock()
+
             
             # 导入并测试lifespan
             from main import lifespan, FastAPI
@@ -218,7 +218,7 @@ class TestMainAsyncIntegration:
              patch('main.NotificationService') as mock_notification_service, \
              patch('main.XtQuantService') as mock_xtquant_service, \
              patch('main.BacktestService') as mock_backtest_service, \
-             patch('main.StrategyService') as mock_strategy_service, \
+
              patch('main.SchedulerService') as mock_scheduler_service, \
              patch('main.StrategyManager') as mock_strategy_manager, \
              patch('main.StrategyExecutor') as mock_strategy_executor, \
@@ -237,7 +237,7 @@ class TestMainAsyncIntegration:
                 'notification_service': mock_notification_service.return_value,
                 'xtquant_service': mock_xtquant_service.return_value,
                 'backtest_service': mock_backtest_service.return_value,
-                'strategy_service': mock_strategy_service.return_value,
+
                 'scheduler_service': mock_scheduler_service.return_value,
                 'strategy_manager': mock_strategy_manager.return_value,
                 'strategy_executor': mock_strategy_executor.return_value,
@@ -254,7 +254,7 @@ class TestMainAsyncIntegration:
                     service.stop = AsyncMock()
                 service.set_data_service = Mock()
                 service.set_strategy_manager = Mock()
-                service.set_strategy_service = Mock()
+
             
             # 导入并测试lifespan
             from main import lifespan, FastAPI
