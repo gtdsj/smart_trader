@@ -112,10 +112,14 @@ class SystemConfig(BaseModel):
     backtest: BacktestConfig = Field(default_factory=BacktestConfig)
 
 
+# 默认配置文件路径
+DEFAULT_CONFIG_PATH = "D:\\smart_trader\\config\\config.json"
+
+
 class ConfigManager:
     """配置管理器"""
     
-    def __init__(self, config_file: str = "config.json"):
+    def __init__(self, config_file: str = DEFAULT_CONFIG_PATH):
         self.config_file = Path(config_file)
         self._config: Optional[SystemConfig] = None
     
@@ -250,7 +254,7 @@ class ConfigManager:
 
 
 # 全局配置管理器
-config_manager = ConfigManager()
+config_manager = ConfigManager(DEFAULT_CONFIG_PATH)
 
 # 全局配置实例
 settings = config_manager.load_config()
